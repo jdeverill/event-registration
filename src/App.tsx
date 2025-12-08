@@ -1718,7 +1718,6 @@ const MultiEventRegistration: React.FC = () => {
   const [verificationExpiry, setVerificationExpiry] = useState<Date | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
-  const [isVerifying] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
 
   const watchedPlayerName: string = watch("player_name", "");
@@ -3106,10 +3105,10 @@ const MultiEventRegistration: React.FC = () => {
                           <button
                             type="button"
                             onClick={verifyCode}
-                            disabled={userEnteredCode.length !== 6 || isVerifying}
+                            disabled={userEnteredCode.length !== 6}
                             className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed whitespace-nowrap"
                           >
-                            {isVerifying ? "Verifying…" : "Verify"}
+                            Verify
                           </button>
                         </div>
                         {verificationExpiry && (
