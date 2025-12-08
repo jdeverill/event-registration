@@ -14,7 +14,6 @@ import {
   Utensils,
   UserPlus,
   Settings,
-  LogOut,
   Plus,
   Edit,
   Trash2,
@@ -101,21 +100,6 @@ interface EventConfig {
 
 interface Member {
   name: string;
-}
-
-interface RegistrationData {
-  timestamp: string;
-  event_id: string;
-  event_name: string;
-  player_name: string;
-  email: string;
-  phone?: string;
-  division?: string;
-  wall?: string;
-  comments?: string;
-  extra_json: Record<string, any>;
-  registration_number: number;
-  is_waiting_list: boolean;
 }
 
 interface ApiResponse<T = any> {
@@ -1424,11 +1408,9 @@ const AdminPanel: React.FC<{
 }> = ({ eventConfigs, onConfigChange, onClose, apiCall }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [editingEvent, setEditingEvent] = useState<EventConfig | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState<{ eventId: string; eventName: string } | null>(null);
 
   const handleSaveConfig = async (config: EventConfig) => {
-    setIsSaving(true);
     try {
       const result = await apiCall("saveEventConfig", { 
         config: JSON.stringify(config)
@@ -1458,8 +1440,6 @@ const AdminPanel: React.FC<{
     } catch (error) {
       console.error("Error saving config:", error);
       alert("Failed to save event configuration");
-    } finally {
-      setIsSaving(false);
     }
   };
 
@@ -1718,7 +1698,6 @@ const MultiEventRegistration: React.FC = () => {
   const [isLoadingStats, setIsLoadingStats] = useState(false);
 
   const [selectedClinicWeek, setSelectedClinicWeek] = useState<string>("");
-  const [weeklyStats, setWeeklyStats] = useState<Record<string, { count: number; participants: number }>>({});
 
   const [isRegistrationOpen, setIsRegistrationOpen] = useState(false);
   const [registrationOpenDate, setRegistrationOpenDate] = useState<Date | null>(null);
@@ -1732,32 +1711,20 @@ const MultiEventRegistration: React.FC = () => {
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string>("");
   const [successMessage, setSuccessMessage] = useState<string>("");
-  const [usingFallbackData, setUsingFallbackData] = useState(false);
   const [isLoadingMembers, setIsLoadingMembers] = useState(false);
 
-  const [verificationCode, setVerificationCode] = useState("");
   const [userEnteredCode, setUserEnteredCode] = useState("");
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const [verificationExpiry, setVerificationExpiry] = useState<Date | null>(null);
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
-  const [isVerifying, setIsVerifying] = useState(false);
+  const [isVerifying] = useState(false);
   const [codeSent, setCodeSent] = useState(false);
 
   const watchedPlayerName: string = watch("player_name", "");
   const watchedClinicWeek: string = watch("clinic_week", "");
   const watchedSurvivorWeek: string = watch("survivor_week", "");
   
-  const getCurrentSelectedWeek = () => {
-    if (currentEventId === "sunday-squash-clinic") {
-      return watchedClinicWeek;
-    } else if (currentEventId === "squash-survivor") {
-      return watchedSurvivorWeek;
-    }
-    return "";
-  };
-
-  const currentSelectedWeek = getCurrentSelectedWeek();
 
   const checkRegistrationTiming = React.useCallback(() => {
     if (!eventConfig) {
@@ -1829,7 +1796,7 @@ const MultiEventRegistration: React.FC = () => {
         }
       }
     }
-  }, [currentEventId]);
+  }, [currentEventId, eventConfig, setValue, watch]);
 
   useEffect(() => {
     const interval = setInterval(checkRegistrationTiming, 60000);
@@ -1879,8 +1846,10 @@ const MultiEventRegistration: React.FC = () => {
     }
   }, [watchedClinicWeek, watchedSurvivorWeek, currentEventId]);
 
+  const requiresEmailVerification = eventConfig?.notifications?.requireEmailVerification ?? false;
+
   useEffect(() => {
-    if (eventConfig?.notifications?.requireEmailVerification) {
+    if (requiresEmailVerification) {
       setIsVerified(false);
       setVerificationToken(null);
       setCodeSent(false);
@@ -1890,29 +1859,28 @@ const MultiEventRegistration: React.FC = () => {
     } else {
       setIsVerified(true);
     }
-  }, [watch("email"), currentEventId, eventConfig?.notifications?.requireEmailVerification]);
+  }, [watch("email"), currentEventId, requiresEmailVerification]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const saved = readCodeFromStorage();
     if (saved) {
       if (new Date() < saved.exp) {
-        setVerificationCode(saved.code);
         setVerificationExpiry(saved.exp);
         setCodeSent(true);
       } else {
         clearStoredCode();
-        setVerificationCode("");
         setVerificationExpiry(null);
         setCodeSent(false);
       }
     } else {
-      setVerificationCode("");
       setVerificationExpiry(null);
       setCodeSent(false);
     }
   }, [CODE_KEY]);
 
   // Load event configs from backend
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const loadEventConfigs = async () => {
       console.log('Loading event configs from backend...');
@@ -1949,7 +1917,7 @@ const MultiEventRegistration: React.FC = () => {
     };
     
     loadEventConfigs();
-  }, []);
+  }, []); // apiCall is stable and defined below
 
   const apiCall = async (action: string, params: Record<string, any> = {}): Promise<ApiResponse> => {
     try {
@@ -2043,14 +2011,11 @@ const MultiEventRegistration: React.FC = () => {
       const res = await apiCall("getMembers");
       if (res.success && Array.isArray(res.members)) {
         setMembers(res.members);
-        setUsingFallbackData(!!res.fallback);
       } else {
         setMembers([]);
-        setUsingFallbackData(true);
       }
     } catch {
       setMembers([]);
-      setUsingFallbackData(true);
     } finally {
       setIsLoadingMembers(false);
     }
@@ -2158,6 +2123,7 @@ const MultiEventRegistration: React.FC = () => {
     });
   }, [currentEventId, registeredMembers]);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (eventConfig?.rules?.requireMembership) {
       loadMembers();
@@ -2239,7 +2205,6 @@ const MultiEventRegistration: React.FC = () => {
         setSubmitError("");
 
         setUserEnteredCode("");
-        setVerificationCode("");
         setVerificationExpiry(null);
         setCodeSent(false);
         clearStoredCode();
@@ -2259,76 +2224,6 @@ const MultiEventRegistration: React.FC = () => {
     setShowSuggestions(false);
   };
 
-  const renderRegistrationRow = (member: any, index: number) => {
-    const teamInfo = extractTeamInfo(member);
-
-    if (teamInfo.teamSize > 1) {
-      return (
-        <div key={index} className="p-3 bg-gray-50 rounded border">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-medium text-gray-900">
-                {teamInfo.isGolf ? 
-                  `Golf Group (${teamInfo.teamSize} ${terminology.participants})` :
-                  `Team (${teamInfo.teamSize} ${terminology.participants})`
-                }
-              </span>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              {teamInfo.isGolf && (teamInfo.dinnerCount || 0) > 0 && (
-                <div className="flex items-center gap-1 text-orange-600">
-                  <Utensils className="w-3 h-3" />
-                  <span>{teamInfo.dinnerCount} dinner{teamInfo.dinnerCount !== 1 ? 's' : ''}</span>
-                </div>
-              )}
-            </div>
-          </div>
-          <div className="space-y-1">
-            {teamInfo.names.map((name: string, nameIndex: number) => (
-              <div key={nameIndex} className="flex items-center justify-between text-xs">
-                <span className="text-gray-700">
-                  {nameIndex === 0 ? '🌟 ' : (teamInfo.isGolf ? '⛳ ' : '🎾 ')}{name}
-                </span>
-                {teamInfo.dinners && teamInfo.dinners[nameIndex] && (
-                  <Utensils className="w-3 h-3 text-green-600" />
-                )}
-              </div>
-            ))}
-          </div>
-          <div className="mt-2 text-xs text-gray-400">
-            #{member.registration_number} • {new Date(member.timestamp).toLocaleDateString()}
-          </div>
-        </div>
-      );
-    }
-
-    const clinicWeek = member.clinic_week || member.week || member.extra_json?.clinic_week || member.extra_json?.week;
-    const survivorWeek = member.survivor_week || member.extra_json?.survivor_week;
-    const weekDisplay = clinicWeek || survivorWeek;
-    
-    return (
-      <div key={index} className="p-3 bg-gray-50 rounded border">
-        <div className="flex items-center justify-between mb-1">
-          <div className="min-w-0 truncate text-sm text-gray-800">
-            {teamInfo.names[0] || "Registrant"}
-          </div>
-          <div className="flex items-center gap-3 flex-shrink-0 text-xs text-gray-500">
-            #{member.registration_number}
-          </div>
-        </div>
-        {weekDisplay && eventConfig?.isRecurring && (
-          <div className="text-xs mt-1 flex items-center gap-1 text-blue-600">
-            <Calendar className="w-3 h-3" />
-            <span>{weekDisplay}</span>
-          </div>
-        )}
-        <div className="text-xs text-gray-400 mt-1">
-          {new Date(member.timestamp).toLocaleDateString()}
-        </div>
-      </div>
-    );
-  };
 
   const onSubmit = async (data: any) => {
     setSubmitError("");
