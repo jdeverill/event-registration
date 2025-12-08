@@ -1846,6 +1846,7 @@ const MultiEventRegistration: React.FC = () => {
   }, [watchedClinicWeek, watchedSurvivorWeek, currentEventId]);
 
   const requiresEmailVerification = eventConfig?.notifications?.requireEmailVerification ?? false;
+  const watchedEmail = watch("email");
 
   useEffect(() => {
     if (requiresEmailVerification) {
@@ -1858,7 +1859,7 @@ const MultiEventRegistration: React.FC = () => {
     } else {
       setIsVerified(true);
     }
-  }, [watch("email"), currentEventId, requiresEmailVerification]);
+  }, [watchedEmail, currentEventId, requiresEmailVerification]);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -1876,6 +1877,7 @@ const MultiEventRegistration: React.FC = () => {
       setVerificationExpiry(null);
       setCodeSent(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [CODE_KEY]);
 
   // Load event configs from backend
@@ -1916,7 +1918,7 @@ const MultiEventRegistration: React.FC = () => {
     };
     
     loadEventConfigs();
-  }, []); // apiCall is stable and defined below
+  }, []); // Intentionally empty - load configs only on mount
 
   const apiCall = async (action: string, params: Record<string, any> = {}): Promise<ApiResponse> => {
     try {
@@ -2130,6 +2132,7 @@ const MultiEventRegistration: React.FC = () => {
       setMembers([]);
     }
     loadRegistrationData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentEventId, eventConfig?.rules?.requireMembership]);
 
   useEffect(() => {
