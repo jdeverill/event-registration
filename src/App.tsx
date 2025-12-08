@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
+import { useParams, useNavigate, BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import {
   List,
   CheckCircle,
@@ -208,45 +209,44 @@ const getThemeClasses = (primary: string = "blue"): ThemeClasses =>
 ========================= */
 
 const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
-  "fall-pdl-9.0-2025": {
-    id: "fall-pdl-9.0-2025",
-    name: "KWRC Fall PDL 9.0",
-    description: "Premier Doubles League - Fall 2025 Season",
-    location: "Played on the Best Doubles Court in the World",
-    format: [
-      "5 teams of 5 positions",
-      "Teams/Positions will be selected based on your level of play",
-      "Sign up individually and you will be placed with a doubles partner and team",
-      "First 50 players signed up get in. Everyone else goes on the waiting/spare list",
-      "If this web form crashes, text or email Jeff and you will be placed in registration order based on timestamp",
-      "Pos. 5 - Mondays at 7 or 8pm",
-      "Pos. 4 - Tuesdays at 6 or 7pm",
-      "Pos. 3 - Tuesdays at 8 or 9pm",
-      "Pos. 2 - Wednesdays at 6 or 7pm",
-      "Pos. 1 - Wednesdays at 8 or 9pm",
-    ],
-    cost: "$60 + hst",
-    maxRegistrations: 50,
-    registrationOpenTime: "",
-    registrationCloseTime: "",
-    fields: [
-      { name: "player_name", type: "text", label: "Player Name", required: true, placeholder: "Start typing your name" },
-      { name: "email", type: "email", label: "Email Address", required: true, placeholder: "your.email@example.com" },
-      { name: "wall", type: "radio", label: "Wall Preference", required: true, options: ["Left Wall", "Right Wall", "Either Wall"] },
-      { name: "preferred_partner", type: "text", label: "Preferred Partner (Optional)", required: false, placeholder: "Enter partner's name if you have a preference" },
-      { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or preferences..." },
-    ],
-    ui: {
-      title: "KWRC Fall PDL 9.0 Registration",
-      subtitle: "10-week Premier Doubles League",
-      theme: { primary: "blue", secondary: "indigo" },
-    },
-    notifications: { requireEmailVerification: true, confirmationEmail: true },
-    rules: { requireMembership: true, allowDuplicates: false, waitingListEnabled: true },
-    isRecurring: false,
-    excludedDates: [],
-  },
-};
+  "winter-pdl-9.0-2026": {
+      id: "winter-pdl-9.0-2026",
+      name: "KWRC Winter PDL 9.0",
+      description: "Premier Doubles League - Winter 2026 Season",
+      location: "Played on the Best Doubles Court in the World",
+      format: [
+        "5 teams of 5 positions",
+        "Teams/Positions will be selected based on your level of play",
+        "Sign up individually and you will be placed with a doubles partner and team",
+        "First 50 players signed up get in. Everyone else goes on the waiting/spare list",
+        "Pos. 5 - Mondays at 7 or 8pm",
+        "Pos. 4 - Tuesdays at 6 or 7pm",
+        "Pos. 3 - Tuesdays at 8 or 9pm",
+        "Pos. 2 - Wednesdays at 6 or 7pm",
+        "Pos. 1 - Wednesdays at 8 or 9pm"
+      ],
+      cost: "$60 + hst",
+      maxRegistrations: 50,
+      registrationOpenTime: "",
+      registrationCloseTime: "",
+      fields: [
+        { name: "player_name", type: "text", label: "Player Name", required: true, placeholder: "Start typing your name" },
+        { name: "email", type: "email", label: "Email Address", required: true, placeholder: "your.email@example.com" },
+        { name: "wall", type: "radio", label: "Wall Preference", required: true, options: ["Left Wall", "Right Wall", "Either Wall"] },
+        { name: "preferred_partner", type: "text", label: "Preferred Partner (Optional)", required: false, placeholder: "Enter partner's name if you have a preference" },
+        { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or preferences..." }
+      ],
+      ui: {
+        title: "KWRC Winter PDL 9.0 Registration",
+        subtitle: "10-week Premier Doubles League",
+        theme: { primary: "blue", secondary: "indigo" }
+      },
+      notifications: { requireEmailVerification: true, confirmationEmail: true },
+      rules: { requireMembership: true, allowDuplicates: false, waitingListEnabled: true },
+      isRecurring: false,
+      excludedDates: []
+    }
+  };
 
 /* =========================
    Utilities
@@ -1596,38 +1596,22 @@ const AdminPanel: React.FC<{
   );
 };
 
-/* =========================
-   Main component
-========================= */
-
-const MultiEventRegistration: React.FC = () => {
+const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) => {
   // Admin state
   const [isAdminMode, setIsAdminMode] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [eventConfigs, setEventConfigs] = useState<Record<string, EventConfig>>(DEFAULT_EVENT_CONFIGS);
   
-  // Get event ID from URL path
-  const getEventIdFromPath = (): string => {
-    const path = window.location.pathname;
-    const configIds = Object.keys(eventConfigs);
-    
-    for (const id of configIds) {
-      if (path.includes(`/${id}`) || path.includes(`/${id.replace(/-/g, '')}`)) {
-        return id;
-      }
-    }
-    
-    return configIds[0] || 'fall-pdl-9.0-2025';
-  };
-
-  const [currentEventId, setCurrentEventId] = useState<string>(getEventIdFromPath());
+  // Use the eventId from props (passed via Router)
+  const navigate = useNavigate();
+  const [currentEventId, setCurrentEventId] = useState<string>(eventId);
   
   // Get event config and dynamically populate weekly recurring events
   const getEventConfig = (eventId: string): EventConfig => {
     const config = eventConfigs[eventId];
     
-    if (!config) return DEFAULT_EVENT_CONFIGS['fall-pdl-9.0-2025'];
+    if (!config) return DEFAULT_EVENT_CONFIGS['winter-pdl-9.0-2026'];
     
     // Handle weekly recurring events
     if (config.isRecurring && config.fields) {
@@ -1661,8 +1645,7 @@ const MultiEventRegistration: React.FC = () => {
 
   const changeEvent = (eventId: string) => {
     setCurrentEventId(eventId);
-    const newPath = `/${eventId}`;
-    window.history.pushState({}, '', newPath);
+    navigate(`/${eventId}`);
     reset();
     setIsVerified(!(eventConfigs[eventId]?.notifications?.requireEmailVerification));
     setCodeSent(false);
@@ -3375,6 +3358,71 @@ const MultiEventRegistration: React.FC = () => {
       </div>
     </div>
   );
+};
+
+/* =========================
+   Router Wrapper Component
+========================= */
+
+const MultiEventRegistration: React.FC = () => {
+  const [eventConfigs, setEventConfigs] = useState<Record<string, EventConfig>>(DEFAULT_EVENT_CONFIGS);
+
+  // Load event configs from backend on mount
+  useEffect(() => {
+    const loadEventConfigs = async () => {
+      try {
+        const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwayR6CzmaI-nwg48TrDPV04xnDvw55ejDXexGRB76gzyQAjzGf4A-IXuGmoV-yPhak/exec";
+        if (!GAS_URL || GAS_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL")) {
+          setEventConfigs(DEFAULT_EVENT_CONFIGS);
+          return;
+        }
+        
+        // Fetch configs from backend
+        const result = await fetch(GAS_URL + "?action=getEventConfigs");
+        const data = await result.json();
+        
+        if (data.success && data.configs) {
+          setEventConfigs(data.configs);
+        } else {
+          setEventConfigs(DEFAULT_EVENT_CONFIGS);
+        }
+      } catch (error) {
+        console.error("Error loading event configs:", error);
+        setEventConfigs(DEFAULT_EVENT_CONFIGS);
+      }
+    };
+    
+    loadEventConfigs();
+  }, []);
+
+  return (
+    <Router>
+      <Routes>
+        {/* Dynamic route for any event ID */}
+        <Route path="/:eventId" element={<MultiEventRegistrationPageWrapper />} />
+        
+        {/* Redirect root to default event */}
+        <Route path="/" element={<Navigate to="/winter-pdl-9.0-2026" replace />} />
+        
+        {/* Catch-all - redirect unknown routes to default */}
+        <Route path="*" element={<Navigate to="/winter-pdl-9.0-2026" replace />} />
+      </Routes>
+    </Router>
+  );
+};
+
+/* =========================
+   Page Wrapper Component
+========================= */
+
+const MultiEventRegistrationPageWrapper: React.FC = () => {
+  const { eventId } = useParams<{ eventId: string }>();
+  
+  if (!eventId) {
+    return <Navigate to="/winter-pdl-9.0-2026" replace />;
+  }
+
+  return <MultiEventRegistrationPage eventId={eventId} />;
 };
 
 export default MultiEventRegistration;
