@@ -220,31 +220,45 @@ const getThemeClasses = (primary: string = "blue"): ThemeClasses =>
   colorMap[primary] || colorMap.blue;
 
 /* =========================
-   Default Event configs (Fallback)
+   Default Event configs (Fallback) - No sample events, just PDL 9.0 as default
 ========================= */
 
 const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
-  "sample-event": {
-    id: "sample-event",
-    name: "Sample Event",
-    description: "This is a sample event",
-    location: "Sample Location",
-    format: ["Sample format"],
-    cost: "Free",
-    maxRegistrations: 20,
+  "fall-pdl-9.0-2025": {
+    id: "fall-pdl-9.0-2025",
+    name: "KWRC Fall PDL 9.0",
+    description: "Premier Doubles League - Fall 2025 Season",
+    location: "Played on the Best Doubles Court in the World",
+    format: [
+      "5 teams of 5 positions",
+      "Teams/Positions will be selected based on your level of play",
+      "Sign up individually and you will be placed with a doubles partner and team",
+      "First 50 players signed up get in. Everyone else goes on the waiting/spare list",
+      "If this web form crashes, text or email Jeff and you will be placed in registration order based on timestamp",
+      "Pos. 5 - Mondays at 7 or 8pm",
+      "Pos. 4 - Tuesdays at 6 or 7pm",
+      "Pos. 3 - Tuesdays at 8 or 9pm",
+      "Pos. 2 - Wednesdays at 6 or 7pm",
+      "Pos. 1 - Wednesdays at 8 or 9pm",
+    ],
+    cost: "$60 + hst",
+    maxRegistrations: 50,
     registrationOpenTime: "",
     registrationCloseTime: "",
     fields: [
-      { name: "player_name", type: "text", label: "Name", required: true, placeholder: "Your name" },
-      { name: "email", type: "email", label: "Email", required: true, placeholder: "your@email.com" },
+      { name: "player_name", type: "text", label: "Player Name", required: true, placeholder: "Start typing your name" },
+      { name: "email", type: "email", label: "Email Address", required: true, placeholder: "your.email@example.com" },
+      { name: "wall", type: "radio", label: "Wall Preference", required: true, options: ["Left Wall", "Right Wall", "Either Wall"] },
+      { name: "preferred_partner", type: "text", label: "Preferred Partner (Optional)", required: false, placeholder: "Enter partner's name if you have a preference" },
+      { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or preferences..." },
     ],
     ui: {
-      title: "Sample Event",
-      subtitle: "Register for this event",
+      title: "KWRC Fall PDL 9.0 Registration",
+      subtitle: "10-week Premier Doubles League",
       theme: { primary: "blue", secondary: "indigo" },
     },
-    notifications: { requireEmailVerification: false, confirmationEmail: false },
-    rules: { requireMembership: false, allowDuplicates: false, waitingListEnabled: false },
+    notifications: { requireEmailVerification: true, confirmationEmail: true },
+    rules: { requireMembership: true, allowDuplicates: false, waitingListEnabled: true },
     isRecurring: false,
     excludedDates: [],
   },
@@ -1624,7 +1638,7 @@ const MultiEventRegistration: React.FC = () => {
       }
     }
     
-    return configIds[0] || 'sample-event';
+    return configIds[0] || 'fall-pdl-9.0-2025';
   };
 
   const [currentEventId, setCurrentEventId] = useState<string>(getEventIdFromPath());
@@ -1633,7 +1647,7 @@ const MultiEventRegistration: React.FC = () => {
   const getEventConfig = (eventId: string): EventConfig => {
     const config = eventConfigs[eventId];
     
-    if (!config) return DEFAULT_EVENT_CONFIGS['sample-event'];
+    if (!config) return DEFAULT_EVENT_CONFIGS['fall-pdl-9.0-2025'];
     
     // Handle weekly recurring events
     if (config.isRecurring && config.fields) {
@@ -1677,6 +1691,14 @@ const MultiEventRegistration: React.FC = () => {
     setIsRegistrationOpen(false);
     setRegistrationOpenDate(null);
     setTimeUntilOpen("");
+    // Clear registration data and show loading spinner when switching events
+    setIsLoadingStats(true);
+    setRegisteredMembers([]);
+    setTotalGolfers(0);
+    setTotalDinners(0);
+    setRegistrationCount(0);
+    setRegistrationStats(null);
+    setSelectedClinicWeek("");
   };
 
   const themeClasses = useMemo(
@@ -2429,7 +2451,7 @@ const MultiEventRegistration: React.FC = () => {
           setSubmitError(result.error || "Registration failed");
         }
       } else {
-        const { player_name, email, phone, division, wall, comments, clinic_week, survivor_week, week, ...extraFields } = data;
+        const { player_name, email, phone, division, wall, comments, clinic_week, survivor_week, week, preferred_partner, ...extraFields } = data;
 
         const registrationData = {
           timestamp: new Date().toISOString(),
@@ -2448,6 +2470,7 @@ const MultiEventRegistration: React.FC = () => {
 
           extra_json: {
             ...extraFields,
+            ...(preferred_partner ? { preferred_partner } : {}),
             ...(eventConfig?.isRecurring && (clinic_week || survivor_week || week) ? { 
               [clinic_week ? 'clinic_week' : survivor_week ? 'survivor_week' : 'week']: clinic_week || survivor_week || week 
             } : {}),
@@ -2970,10 +2993,16 @@ const MultiEventRegistration: React.FC = () => {
                         switch (field.type) {
                           case "text":
                           case "email":
+                            // Disable certain fields until email is verified (but not player_name or email itself)
+                            const shouldDisableTextField = eventConfig?.notifications?.requireEmailVerification && 
+                              !isVerified && 
+                              field.name !== "player_name" && 
+                              field.name !== "email";
                             return (
-                              <div key={field.name}>
+                              <div key={field.name} className={shouldDisableTextField ? "opacity-50" : ""}>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   {field.label} {field.required && "*"}
+                                  {shouldDisableTextField && <span className="text-xs text-gray-500 ml-2">(verify email first)</span>}
                                 </label>
                                 <input
                                   {...register(field.name, {
@@ -2985,8 +3014,9 @@ const MultiEventRegistration: React.FC = () => {
                                   type={field.type}
                                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
                                     errMsg ? "border-red-500" : "border-gray-300"
-                                  }`}
+                                  } ${shouldDisableTextField ? "bg-gray-100 cursor-not-allowed" : ""}`}
                                   placeholder={field.placeholder}
+                                  disabled={shouldDisableTextField}
                                 />
                                 {errMsg && (
                                   <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -2998,10 +3028,12 @@ const MultiEventRegistration: React.FC = () => {
                             );
 
                           case "select":
+                            const shouldDisableSelect = eventConfig?.notifications?.requireEmailVerification && !isVerified;
                             return (
-                              <div key={field.name}>
+                              <div key={field.name} className={shouldDisableSelect ? "opacity-50" : ""}>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   {field.label} {field.required && "*"}
+                                  {shouldDisableSelect && <span className="text-xs text-gray-500 ml-2">(verify email first)</span>}
                                 </label>
                                 <select
                                   {...register(field.name, {
@@ -3009,8 +3041,9 @@ const MultiEventRegistration: React.FC = () => {
                                   })}
                                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
                                     errMsg ? "border-red-500" : "border-gray-300"
-                                  }`}
+                                  } ${shouldDisableSelect ? "bg-gray-100 cursor-not-allowed" : ""}`}
                                   defaultValue={field.defaultValue || ""}
+                                  disabled={shouldDisableSelect}
                                 >
                                   <option value="" disabled>
                                     Select {field.label}
@@ -3031,19 +3064,25 @@ const MultiEventRegistration: React.FC = () => {
                             );
 
                           case "radio":
+                            const isRadioDisabled = eventConfig?.notifications?.requireEmailVerification && !isVerified;
                             return (
-                              <div key={field.name}>
+                              <div key={field.name} className={isRadioDisabled ? "opacity-50" : ""}>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   {field.label} {field.required && "*"}
+                                  {isRadioDisabled && <span className="text-xs text-gray-500 ml-2">(verify email first)</span>}
                                 </label>
                                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                                   {field.options?.map((opt) => (
                                     <label
                                       key={opt}
-                                      className={`flex items-center justify-center p-3 border rounded-lg transition-colors cursor-pointer ${
-                                        watch(field.name) === opt
-                                          ? `${themeClasses.border} ${themeClasses.bgLight} ${themeClasses.textLight}`
-                                          : "border-gray-300 hover:border-gray-400"
+                                      className={`flex items-center justify-center p-3 border rounded-lg transition-colors ${
+                                        isRadioDisabled 
+                                          ? "cursor-not-allowed bg-gray-100 border-gray-200" 
+                                          : `cursor-pointer ${
+                                              watch(field.name) === opt
+                                                ? `${themeClasses.border} ${themeClasses.bgLight} ${themeClasses.textLight}`
+                                                : "border-gray-300 hover:border-gray-400"
+                                            }`
                                       }`}
                                     >
                                       <input
@@ -3051,8 +3090,9 @@ const MultiEventRegistration: React.FC = () => {
                                         type="radio"
                                         value={opt}
                                         className="sr-only"
+                                        disabled={isRadioDisabled}
                                       />
-                                      <span className="text-sm font-medium">{opt}</span>
+                                      <span className={`text-sm font-medium ${isRadioDisabled ? "text-gray-400" : ""}`}>{opt}</span>
                                     </label>
                                   ))}
                                 </div>
@@ -3066,10 +3106,12 @@ const MultiEventRegistration: React.FC = () => {
                             );
 
                           case "textarea":
+                            const shouldDisableTextarea = eventConfig?.notifications?.requireEmailVerification && !isVerified;
                             return (
-                              <div key={field.name}>
+                              <div key={field.name} className={shouldDisableTextarea ? "opacity-50" : ""}>
                                 <label className="block text-sm font-medium text-gray-700 mb-2">
                                   {field.label} {field.required && "*"}
+                                  {shouldDisableTextarea && <span className="text-xs text-gray-500 ml-2">(verify email first)</span>}
                                 </label>
                                 <textarea
                                   {...register(field.name, {
@@ -3077,9 +3119,10 @@ const MultiEventRegistration: React.FC = () => {
                                   })}
                                   className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent resize-none ${
                                     errMsg ? "border-red-500" : "border-gray-300"
-                                  }`}
+                                  } ${shouldDisableTextarea ? "bg-gray-100 cursor-not-allowed" : ""}`}
                                   placeholder={field.placeholder}
                                   rows={3}
+                                  disabled={shouldDisableTextarea}
                                 />
                                 {errMsg && (
                                   <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
@@ -3091,16 +3134,23 @@ const MultiEventRegistration: React.FC = () => {
                             );
 
                           case "checkbox":
+                            const shouldDisableCheckbox = eventConfig?.notifications?.requireEmailVerification && !isVerified;
                             return (
-                              <div key={field.name}>
-                                <label className="flex items-center p-3 border rounded-lg transition-colors cursor-pointer hover:bg-gray-50 border-gray-300">
+                              <div key={field.name} className={shouldDisableCheckbox ? "opacity-50" : ""}>
+                                <label className={`flex items-center p-3 border rounded-lg transition-colors ${
+                                  shouldDisableCheckbox 
+                                    ? "cursor-not-allowed bg-gray-100 border-gray-200" 
+                                    : "cursor-pointer hover:bg-gray-50 border-gray-300"
+                                }`}>
                                   <input
                                     {...register(field.name)}
                                     type="checkbox"
                                     className={`w-4 h-4 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring}`}
+                                    disabled={shouldDisableCheckbox}
                                   />
-                                  <span className="ml-3 text-sm font-medium text-gray-700">
+                                  <span className={`ml-3 text-sm font-medium ${shouldDisableCheckbox ? "text-gray-400" : "text-gray-700"}`}>
                                     {field.label} {field.required && "*"}
+                                    {shouldDisableCheckbox && <span className="text-xs text-gray-500 ml-2">(verify email first)</span>}
                                   </span>
                                 </label>
                                 {errMsg && (
@@ -3187,13 +3237,18 @@ const MultiEventRegistration: React.FC = () => {
 
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || (eventConfig?.notifications?.requireEmailVerification && !isVerified)}
                       className={`w-full ${themeClasses.bg} text-white py-4 px-6 rounded-lg font-medium text-lg ${themeClasses.bgHover} focus:outline-none focus:ring-2 ${themeClasses.ring} focus:ring-offset-2 disabled:bg-gray-400 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2`}
                     >
                       {isSubmitting ? (
                         <>
                           <Loader2 className="w-5 h-5 animate-spin" />
                           {isWaitingList ? "Joining Waiting List..." : "Registering..."}
+                        </>
+                      ) : eventConfig?.notifications?.requireEmailVerification && !isVerified ? (
+                        <>
+                          <Mail className="w-5 h-5" />
+                          Verify Email to Register
                         </>
                       ) : (
                         <>{isWaitingList ? "Join Waiting List" : `Register for ${eventConfig.name}`}</>
@@ -3329,7 +3384,7 @@ const MultiEventRegistration: React.FC = () => {
                     const confirmedRegistrations = registeredMembers
                       .filter((member: any) => !member.is_waiting_list)
                       .sort((a: any, b: any) => {
-                        if (currentEventId === 'fall-pdl-8.0-2025') {
+                        if (currentEventId === 'fall-pdl-9.0-2025') {
                           return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
                         }
                         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
@@ -3339,7 +3394,7 @@ const MultiEventRegistration: React.FC = () => {
                     const waitingListRegistrations = registeredMembers
                       .filter((member: any) => member.is_waiting_list)
                       .sort((a: any, b: any) => {
-                        if (currentEventId === 'fall-pdl-8.0-2025') {
+                        if (currentEventId === 'fall-pdl-9.0-2025') {
                           return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
                         }
                         return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
