@@ -206,49 +206,11 @@ const getThemeClasses = (primary: string = "blue"): ThemeClasses =>
   colorMap[primary] || colorMap.blue;
 
 /* =========================
-   Default Event configs (Fallback) - No sample events, just PDL 9.0 as default
+   Default Event configs - Only local events (Club Championships)
+   All other events load from Google Sheets admin panel
 ========================= */
 
 const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
-  "winter-pdl-9.0-2026": {
-      id: "winter-pdl-9.0-2026",
-      name: "KWRC Winter PDL 9.0",
-      description: "Premier Doubles League - Winter 2026 Season",
-      location: "Played on the Best Doubles Court in the World",
-      format: [
-        "5 teams of 5 positions",
-        "Teams/Positions will be selected based on your level of play",
-        "Sign up individually and you will be placed with a doubles partner and team",
-        "First 50 players signed up get in. Everyone else goes on the waiting/spare list",
-        "Pos. 5 - Mondays at 7 or 8pm",
-        "Pos. 4 - Tuesdays at 6 or 7pm",
-        "Pos. 3 - Tuesdays at 8 or 9pm",
-        "Pos. 2 - Wednesdays at 6 or 7pm",
-        "Pos. 1 - Wednesdays at 8 or 9pm"
-      ],
-      cost: "$60 + hst",
-      maxRegistrations: 50,
-      registrationOpenTime: "",
-      registrationCloseTime: "",
-      showInHeader: true,
-      fields: [
-        { name: "player_name", type: "text", label: "Player Name", required: true, placeholder: "Start typing your name" },
-        { name: "email", type: "email", label: "Email Address", required: true, placeholder: "your.email@example.com" },
-        { name: "wall", type: "radio", label: "Wall Preference", required: true, options: ["Left Wall", "Right Wall", "Either Wall"] },
-        { name: "preferred_partner", type: "text", label: "Preferred Partner (Optional)", required: false, placeholder: "Enter partner's name if you have a preference" },
-        { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or preferences..." }
-      ],
-      ui: {
-        title: "KWRC Winter PDL 9.0 Registration",
-        subtitle: "10-week Premier Doubles League",
-        theme: { primary: "blue", secondary: "indigo" }
-      },
-      notifications: { requireEmailVerification: true, confirmationEmail: true },
-      rules: { requireMembership: true, allowDuplicates: false, waitingListEnabled: true },
-      isRecurring: false,
-      excludedDates: []
-    },
-  
   "club-champs": {
     id: "club-champs",
     name: "Club Championships",
@@ -293,6 +255,20 @@ const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
 
 const isDate = (value: unknown): value is Date =>
   Object.prototype.toString.call(value) === "[object Date]" && !Number.isNaN((value as Date).getTime());
+
+// Format timestamp in condensed format: "Feb. 17 11:28am"
+const formatCondensedTimestamp = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  const monthNames = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+  const month = monthNames[date.getMonth()];
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  return `${month} ${day} ${displayHours}:${displayMinutes}${ampm}`;
+};
 
 const CLINIC_SCHEDULE_CONFIG = {
   excludedDates: [
@@ -583,39 +559,12 @@ const extractTeamInfo = (r: any): TeamInfo => {
   };
 };
 
-const getFallbackData = (action: string, params: Record<string, any> = {}): ApiResponse => {
-  switch (action) {
-    case "getMembers":
-      return { success: true, members: [], fallback: true };
-    case "getRegistrationCount":
-      return { success: true, count: 0, golferCount: 0, totalGolfers: 0, fallback: true };
-    case "getRegistrationStats":
-      return { 
-        success: true, 
-        registrationCount: 0,
-        totalGolfers: 0,
-        confirmedGolfers: 0,
-        waitingListGolfers: 0,
-        dinnerSelections: {},
-        fallback: true 
-      };
-    case "getRegistrations":
-      return { success: true, registrations: [] as any[], fallback: true };
-    case "checkDuplicate":
-      return { success: true, isDuplicate: false, fallback: true };
-    case "register":
-      return { success: true, message: `Registration successful for ${params.player_name || "group"}`, fallback: true };
-    case "sendVerification":
-      return { success: true, message: "Verification email sent", fallback: true };
-    case "getEventConfigs":
-      return { success: true, configs: DEFAULT_EVENT_CONFIGS, fallback: true };
-    case "saveEventConfig":
-      return { success: true, message: "Event configuration saved", fallback: true };
-    case "deleteEventConfig":
-      return { success: true, message: "Event configuration deleted", fallback: true };
-    default:
-      return { success: false, error: "Unknown action", fallback: true };
-  }
+// Helper function to get the most recently added event from configs
+const getMostRecentEventId = (configs: Record<string, EventConfig>): string => {
+  const eventIds = Object.keys(configs);
+  if (eventIds.length === 0) return "club-champs"; // Fallback to club-champs if no events
+  // Return the last event in the object (most recently added)
+  return eventIds[eventIds.length - 1];
 };
 
 /* =========================
@@ -1691,7 +1640,11 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
   const getEventConfig = (eventId: string): EventConfig => {
     const config = eventConfigs[eventId];
     
-    if (!config) return DEFAULT_EVENT_CONFIGS['winter-pdl-9.0-2026'];
+    if (!config) {
+      // Return the most recent event or club-champs as fallback
+      const mostRecentId = getMostRecentEventId(eventConfigs);
+      return eventConfigs[mostRecentId] || DEFAULT_EVENT_CONFIGS['club-champs'];
+    }
     
     // Handle weekly recurring events
     if (config.isRecurring && config.fields) {
@@ -1759,6 +1712,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
   const [registrationStats, setRegistrationStats] = useState<any>(null);
   const [registeredMembers, setRegisteredMembers] = useState<any[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(false);
+  const [configLoadError, setConfigLoadError] = useState<string | null>(null);
 
   const [selectedClinicWeek, setSelectedClinicWeek] = useState<string>("");
 
@@ -1953,7 +1907,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const loadEventConfigs = async () => {
-      console.log('Loading event configs from backend...');
+      console.log('Loading event configs from Google Sheets...');
+      setConfigLoadError(null);
+      
       try {
         const result = await apiCall("getEventConfigs");
         console.log('Event configs response:', result);
@@ -1967,28 +1923,34 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           };
           
           const configKeys = Object.keys(mergedConfigs);
-          console.log('Merged configs:', configKeys);
+          console.log('Loaded configs from Google Sheets:', configKeys);
           
           if (configKeys.length > 0) {
             setEventConfigs(mergedConfigs);
             
             // Update current event if it doesn't exist in loaded configs
             if (!mergedConfigs[currentEventId]) {
-              const firstEventId = configKeys[0];
-              console.log('Switching to first available event:', firstEventId);
-              setCurrentEventId(firstEventId);
+              const mostRecentEventId = getMostRecentEventId(mergedConfigs);
+              console.log('Switching to most recent event:', mostRecentEventId);
+              setCurrentEventId(mostRecentEventId);
             }
           } else {
-            console.warn('No event configs found, using defaults');
+            console.warn('No event configs found in Google Sheets');
+            setConfigLoadError('No events found in Google Sheets admin panel');
             setEventConfigs(DEFAULT_EVENT_CONFIGS);
+            setCurrentEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
           }
         } else {
-          console.warn('Failed to load configs, using defaults:', result.error);
+          console.warn('Failed to load configs from Google Sheets:', result.error);
+          setConfigLoadError(result.error || 'Failed to connect to Google Sheets');
           setEventConfigs(DEFAULT_EVENT_CONFIGS);
+          setCurrentEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
         }
       } catch (error) {
         console.error("Error loading event configs:", error);
+        setConfigLoadError('Unable to connect to Google Sheets backend');
         setEventConfigs(DEFAULT_EVENT_CONFIGS);
+        setCurrentEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
       }
     };
     
@@ -1999,13 +1961,14 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
   const apiCall = async (action: string, params: Record<string, any> = {}): Promise<ApiResponse> => {
     try {
       if (!GAS_URL || GAS_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL")) {
-        return getFallbackData(action, params);
+        console.error("Google Sheets URL not configured. Please set REACT_APP_GAS_URL in your environment.");
+        return { success: false, error: "Google Sheets integration not configured" };
       }
       const data = await jsonpCall(GAS_URL, { action, event_id: currentEventId, ...params });
       return data;
     } catch (err) {
       console.error("API call failed:", err);
-      return getFallbackData(action, params);
+      return { success: false, error: `API call failed: ${err}` };
     }
   };
 
@@ -2671,6 +2634,21 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
       )}
 
       <div className="max-w-screen-2xl mx-auto">
+        {/* Configuration Error Banner */}
+        {configLoadError && (
+          <div className="mb-6 bg-yellow-50 border-l-4 border-yellow-400 p-4 rounded-r-lg">
+            <div className="flex items-start">
+              <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 mr-3 flex-shrink-0" />
+              <div>
+                <h3 className="text-sm font-medium text-yellow-800">Google Sheets Connection Issue</h3>
+                <p className="text-sm text-yellow-700 mt-1">
+                  {configLoadError}. Only local events (Club Championships) are available. Please contact the administrator.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Admin Button (Fixed Position) */}
         {isAdminMode ? (
           <button
@@ -2820,7 +2798,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-xl overflow-hidden">
               <div className={`bg-gradient-to-r ${themeClasses.gradient} px-6 py-8 text-white`}>
-                <h1 className="text-3xl font-bold mb-2">{eventConfig.ui.title}</h1>
+                <h1 className="text-3xl font-bold mb-2">{eventConfig.name}</h1>
                 <p className="text-green-100">{eventConfig.ui.subtitle}</p>
               </div>
 
@@ -3720,7 +3698,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                       {players.map((player: any, idx: number) => (
                                         <div key={idx} className="text-sm px-3 py-2 bg-indigo-50 rounded border border-indigo-100 flex items-center justify-between">
                                           <span className="text-gray-800">{player.player_name}</span>
-                                          <span className="text-xs text-gray-500">#{player.registration_number}</span>
+                                          <span className="text-xs text-gray-500">{formatCondensedTimestamp(player.timestamp)}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -3753,14 +3731,11 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                     </div>
                                     <div className="space-y-1 ml-2">
                                       {teams.map((team: any, idx: number) => (
-                                        <div key={idx} className="text-sm px-3 py-2 bg-purple-50 rounded border border-purple-100">
-                                          <div className="flex items-center justify-between mb-1">
-                                            <span className="font-medium text-gray-800">{team.player_name}</span>
-                                            <span className="text-xs text-gray-500">#{team.registration_number}</span>
-                                          </div>
-                                          <div className="text-xs text-gray-600 ml-2">
-                                            Partner: {team.partner}
-                                          </div>
+                                        <div key={idx} className="text-sm px-3 py-2 bg-purple-50 rounded border border-purple-100 flex items-center justify-between">
+                                          <span className="text-gray-800">
+                                            {team.player_name} / {team.partner}
+                                          </span>
+                                          <span className="text-xs text-gray-500">{formatCondensedTimestamp(team.timestamp)}</span>
                                         </div>
                                       ))}
                                     </div>
@@ -3820,13 +3795,8 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                   <div className="min-w-0 truncate text-sm text-green-800">
                                     {member.player_name || "Registrant"}
                                   </div>
-                                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-xs text-green-600">
-                                    <span>#{member.registration_number}</span>
-                                    <span>{new Date(member.timestamp).toLocaleDateString()} at {new Date(member.timestamp).toLocaleTimeString('en-US', {
-                                      hour: 'numeric',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    })}</span>
+                                  <div className="flex-shrink-0 text-xs text-green-600">
+                                    <span>{formatCondensedTimestamp(member.timestamp)}</span>
                                   </div>
                                 </div>
                               ))}
@@ -3849,13 +3819,8 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                   <div className="min-w-0 truncate text-sm text-orange-800">
                                     {member.player_name || "Registrant"}
                                   </div>
-                                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-xs text-orange-600">
-                                    <span>#{member.registration_number}</span>
-                                    <span>{new Date(member.timestamp).toLocaleDateString()} at {new Date(member.timestamp).toLocaleTimeString('en-US', {
-                                      hour: 'numeric',
-                                      minute: '2-digit',
-                                      hour12: true
-                                    })}</span>
+                                  <div className="flex-shrink-0 text-xs text-orange-600">
+                                    <span>{formatCondensedTimestamp(member.timestamp)}</span>
                                   </div>
                                 </div>
                               ))}
@@ -3883,6 +3848,61 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
 };
 
 /* =========================
+   Default Event Redirect Component
+========================= */
+
+const DefaultEventRedirect: React.FC = () => {
+  const [defaultEventId, setDefaultEventId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadDefaultEvent = async () => {
+      try {
+        const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwayR6CzmaI-nwg48TrDPV04xnDvw55ejDXexGRB76gzyQAjzGf4A-IXuGmoV-yPhak/exec";
+        
+        if (!GAS_URL || GAS_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL")) {
+          setDefaultEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
+          setLoading(false);
+          return;
+        }
+
+        const result = await fetch(GAS_URL + "?action=getEventConfigs");
+        const data = await result.json();
+        
+        if (data.success && data.configs) {
+          const mergedConfigs = {
+            ...DEFAULT_EVENT_CONFIGS,
+            ...data.configs,
+          };
+          setDefaultEventId(getMostRecentEventId(mergedConfigs));
+        } else {
+          setDefaultEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
+        }
+      } catch (error) {
+        console.error("Error loading default event:", error);
+        setDefaultEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
+      }
+      setLoading(false);
+    };
+    
+    loadDefaultEvent();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-indigo-600 mx-auto mb-4" />
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return <Navigate to={`/${defaultEventId}`} replace />;
+};
+
+/* =========================
    Router Wrapper Component
 ========================= */
 
@@ -3893,11 +3913,11 @@ const MultiEventRegistration: React.FC = () => {
         {/* Dynamic route for any event ID */}
         <Route path="/:eventId" element={<MultiEventRegistrationPageWrapper />} />
         
-        {/* Redirect root to default event */}
-        <Route path="/" element={<Navigate to="/winter-pdl-9.0-2026" replace />} />
+        {/* Redirect root to most recent event */}
+        <Route path="/" element={<DefaultEventRedirect />} />
         
-        {/* Catch-all - redirect unknown routes to default */}
-        <Route path="*" element={<Navigate to="/winter-pdl-9.0-2026" replace />} />
+        {/* Catch-all - redirect unknown routes to most recent event */}
+        <Route path="*" element={<DefaultEventRedirect />} />
       </Routes>
     </Router>
   );
@@ -3911,7 +3931,7 @@ const MultiEventRegistrationPageWrapper: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
   
   if (!eventId) {
-    return <Navigate to="/winter-pdl-9.0-2026" replace />;
+    return <DefaultEventRedirect />;
   }
 
   return <MultiEventRegistrationPage eventId={eventId} />;

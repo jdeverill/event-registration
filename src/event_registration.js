@@ -383,6 +383,20 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
 const isDate = (value: unknown): value is Date =>
   Object.prototype.toString.call(value) === "[object Date]" && !Number.isNaN((value as Date).getTime());
 
+// Format timestamp in condensed format: "Feb. 17 11:28am"
+const formatCondensedTimestamp = (timestamp: string): string => {
+  const date = new Date(timestamp);
+  const monthNames = ['Jan.', 'Feb.', 'Mar.', 'Apr.', 'May', 'Jun.', 'Jul.', 'Aug.', 'Sep.', 'Oct.', 'Nov.', 'Dec.'];
+  const month = monthNames[date.getMonth()];
+  const day = date.getDate();
+  const hours = date.getHours();
+  const minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const displayHours = hours % 12 || 12;
+  const displayMinutes = minutes.toString().padStart(2, '0');
+  return `${month} ${day} ${displayHours}:${displayMinutes}${ampm}`;
+};
+
 // Configuration for clinic schedule management
 const CLINIC_SCHEDULE_CONFIG = {
   excludedDates: [
@@ -1426,7 +1440,7 @@ const golfFoursomes: Foursome[] = useMemo(() => {
             ))}
           </div>
           <div className="mt-2 text-xs text-gray-400">
-            #{member.registration_number} • {new Date(member.timestamp).toLocaleDateString()}
+            {formatCondensedTimestamp(member.timestamp)}
           </div>
         </div>
       );
@@ -1444,7 +1458,7 @@ const golfFoursomes: Foursome[] = useMemo(() => {
             {teamInfo.names[0] || "Registrant"}
           </div>
           <div className="flex items-center gap-3 flex-shrink-0 text-xs text-gray-500">
-            #{member.registration_number}
+            {formatCondensedTimestamp(member.timestamp)}
           </div>
         </div>
         {weekDisplay && (member.event_id === "sunday-squash-clinic" || member.event_id === "squash-survivor") && (
@@ -1894,7 +1908,7 @@ const golfFoursomes: Foursome[] = useMemo(() => {
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-xl overflow-hidden">
               <div className={`bg-gradient-to-r ${themeClasses.gradient} px-6 py-8 text-white`}>
-                <h1 className="text-3xl font-bold mb-2">{eventConfig.ui.title}</h1>
+                <h1 className="text-3xl font-bold mb-2">{eventConfig.name}</h1>
                 <p className="text-green-100">{eventConfig.ui.subtitle}</p>
               </div>
 
@@ -2940,7 +2954,7 @@ const golfFoursomes: Foursome[] = useMemo(() => {
                       {players.map((player: any, idx: number) => (
                         <div key={idx} className="text-sm px-3 py-2 bg-indigo-50 rounded border border-indigo-100 flex items-center justify-between">
                           <span className="text-gray-800">{player.player_name}</span>
-                          <span className="text-xs text-gray-500">#{player.registration_number}</span>
+                          <span className="text-xs text-gray-500">{formatCondensedTimestamp(player.timestamp)}</span>
                         </div>
                       ))}
                     </div>
@@ -2973,14 +2987,11 @@ const golfFoursomes: Foursome[] = useMemo(() => {
                     </div>
                     <div className="space-y-1 ml-2">
                       {teams.map((team: any, idx: number) => (
-                        <div key={idx} className="text-sm px-3 py-2 bg-purple-50 rounded border border-purple-100">
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-medium text-gray-800">{team.player_name}</span>
-                            <span className="text-xs text-gray-500">#{team.registration_number}</span>
-                          </div>
-                          <div className="text-xs text-gray-600 ml-2">
-                            Partner: {team.partner}
-                          </div>
+                        <div key={idx} className="text-sm px-3 py-2 bg-purple-50 rounded border border-purple-100 flex items-center justify-between">
+                          <span className="text-gray-800">
+                            {team.player_name} / {team.partner}
+                          </span>
+                          <span className="text-xs text-gray-500">{formatCondensedTimestamp(team.timestamp)}</span>
                         </div>
                       ))}
                     </div>
@@ -3043,14 +3054,9 @@ const waitingListRegistrations = registeredMembers
                   <div className="min-w-0 truncate text-sm text-green-800">
                     {member.player_name || "Registrant"}
                   </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-xs text-green-600">
-                      <span>#{member.registration_number}</span>
-                      <span>{new Date(member.timestamp).toLocaleDateString()} at {new Date(member.timestamp).toLocaleTimeString('en-US', {
-                        hour: 'numeric',
-                        minute: '2-digit',
-                        hour12: true
-                      })}</span>
-                    </div>
+                  <div className="flex-shrink-0 text-xs text-green-600">
+                    <span>{formatCondensedTimestamp(member.timestamp)}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -3073,13 +3079,8 @@ const waitingListRegistrations = registeredMembers
                   <div className="min-w-0 truncate text-sm text-orange-800">
                     {member.player_name || "Registrant"}
                   </div>
-                  <div className="flex flex-col items-end gap-1 flex-shrink-0 text-xs text-orange-600">
-                    <span>#{member.registration_number}</span>
-                    <span>{new Date(member.timestamp).toLocaleDateString()} at {new Date(member.timestamp).toLocaleTimeString('en-US', {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                      hour12: true
-                    })}</span>
+                  <div className="flex-shrink-0 text-xs text-orange-600">
+                    <span>{formatCondensedTimestamp(member.timestamp)}</span>
                   </div>
                 </div>
               ))}
