@@ -21,6 +21,8 @@ import {
   Save,
   X,
   Lock,
+  ChevronUp,
+  ChevronDown,
 } from "lucide-react";
 
 /* =========================
@@ -720,6 +722,28 @@ const EventConfigForm: React.FC<{
     }
   };
 
+  const handleMoveFormatUp = (index: number) => {
+    if (Array.isArray(config.format) && index > 0) {
+      const newFormat = [...config.format];
+      [newFormat[index - 1], newFormat[index]] = [newFormat[index], newFormat[index - 1]];
+      setConfig({
+        ...config,
+        format: newFormat,
+      });
+    }
+  };
+
+  const handleMoveFormatDown = (index: number) => {
+    if (Array.isArray(config.format) && index < config.format.length - 1) {
+      const newFormat = [...config.format];
+      [newFormat[index], newFormat[index + 1]] = [newFormat[index + 1], newFormat[index]];
+      setConfig({
+        ...config,
+        format: newFormat,
+      });
+    }
+  };
+
   const handleAddField = () => {
     if (!fieldForm.name || !fieldForm.label) {
       alert("Field name and label are required");
@@ -954,11 +978,32 @@ const EventConfigForm: React.FC<{
                 <div className="space-y-1">
                   {config.format.map((item, index) => (
                     <div key={index} className="flex items-center gap-2 p-2 bg-gray-50 rounded">
+                      <div className="flex flex-col gap-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleMoveFormatUp(index)}
+                          disabled={index === 0}
+                          className={`p-0.5 ${index === 0 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-gray-800'}`}
+                          title="Move up"
+                        >
+                          <ChevronUp className="w-4 h-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMoveFormatDown(index)}
+                          disabled={index === config.format.length - 1}
+                          className={`p-0.5 ${index === config.format.length - 1 ? 'text-gray-300 cursor-not-allowed' : 'text-gray-600 hover:text-gray-800'}`}
+                          title="Move down"
+                        >
+                          <ChevronDown className="w-4 h-4" />
+                        </button>
+                      </div>
                       <span className="flex-1 text-sm">{item}</span>
                       <button
                         type="button"
                         onClick={() => handleRemoveFormat(index)}
                         className="text-red-600 hover:text-red-700"
+                        title="Remove"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
