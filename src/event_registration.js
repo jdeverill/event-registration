@@ -338,6 +338,41 @@ const EVENT_CONFIGS: Record<string, EventConfig> = {
     },
     notifications: { requireEmailVerification: false, confirmationEmail: false },
     rules: { requireMembership: true, allowDuplicates: false, waitingListEnabled: true }
+  },
+
+  "club-champs": {
+    id: "club-champs",
+    name: "Club Championships",
+    description: "Annual Club Championships - Singles and Doubles",
+    location: "KWRC Squash Courts",
+    format: [
+      "Sign up for Singles, Doubles, or Both",
+      "Divisions: A, B, C, D, and 60+",
+      "Players can register for multiple events",
+      "For doubles: Partner can be selected later or specified now"
+    ],
+    cost: "$40 per event",
+    maxRegistrations: 100,
+    registrationOpenTime: "",
+    registrationCloseTime: "",
+    showInHeader: true,
+    fields: [
+      { name: "player_name", type: "text", label: "Player Name", required: true, placeholder: "Start typing your name" },
+      { name: "email", type: "email", label: "Email Address", required: true, placeholder: "your.email@example.com" },
+      { name: "event_types", type: "checkbox", label: "Singles", required: false },
+      { name: "event_types_doubles", type: "checkbox", label: "Doubles", required: false },
+      { name: "singles_division", type: "select", label: "Singles Division", required: false, options: ["A", "B", "C", "D", "60+"] },
+      { name: "doubles_division", type: "select", label: "Doubles Division", required: false, options: ["A", "B", "C", "D", "60+"] },
+      { name: "doubles_partner", type: "text", label: "Doubles Partner", required: false, placeholder: "Start typing partner name" },
+      { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or requests..." }
+    ],
+    ui: {
+      title: "Club Championships Registration",
+      subtitle: "Sign up for Singles and/or Doubles - Multiple divisions available",
+      theme: { primary: "indigo", secondary: "purple" }
+    },
+    notifications: { requireEmailVerification: false, confirmationEmail: true },
+    rules: { requireMembership: true, allowDuplicates: true, waitingListEnabled: false }
   }
 };
 
@@ -692,6 +727,7 @@ const MultiEventRegistration: React.FC = () => {
     const path = window.location.pathname;
     if (path.includes('/golf-tournament')) return 'golf-tournament-2025';
     if (path.includes('/fall-pdl')) return 'fall-pdl-8.0-2025';
+    if (path.includes('/club-champs')) return 'club-champs';
     return 'golf-tournament-2025'; // default
   };
 
@@ -733,6 +769,7 @@ const MultiEventRegistration: React.FC = () => {
   const eventPaths: Record<string, string> = {
     'golf-tournament-2025': '/golf-tournament',
     'fall-pdl-8.0-2025': '/fall-pdl',
+    'club-champs': '/club-champs',
   };
   const newPath = eventPaths[eventId] || '/';
   window.history.pushState({}, '', newPath);
@@ -782,6 +819,9 @@ const MultiEventRegistration: React.FC = () => {
   const [members, setMembers] = useState<Member[]>([]);
   const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [filteredPartners, setFilteredPartners] = useState<Member[]>([]);
+  const [showPartnerSuggestions, setShowPartnerSuggestions] = useState(false);
+  const [existingPartnerRegistration, setExistingPartnerRegistration] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [submitError, setSubmitError] = useState<string>("");
@@ -802,6 +842,9 @@ const MultiEventRegistration: React.FC = () => {
   const watchedPlayerName: string = watch("player_name", "");
   const watchedClinicWeek: string = watch("clinic_week", "");
   const watchedSurvivorWeek: string = watch("survivor_week", "");
+  const watchedEventTypesSingles: boolean = watch("event_types", false);
+  const watchedEventTypesDoubles: boolean = watch("event_types_doubles", false);
+  const watchedDoublesPartner: string = watch("doubles_partner", "");
   
   // Get the current selected week for recurring events
   const getCurrentSelectedWeek = () => {
@@ -1227,6 +1270,39 @@ const golfFoursomes: Foursome[] = useMemo(() => {
     }
   }, [watchedPlayerName, members, eventConfig?.rules?.requireMembership]);
 
+  // Filter partner suggestions for Club Championships
+  useEffect(() => {
+    if (currentEventId === "club-champs" && watchedDoublesPartner) {
+      const filtered = members.filter((m) =>
+        m.name.toLowerCase().includes(watchedDoublesPartner.toLowerCase())
+      );
+      setFilteredPartners(filtered);
+      setShowPartnerSuggestions(filtered.length > 0 && watchedDoublesPartner !== filtered[0]?.name);
+    } else {
+      setFilteredPartners([]);
+      setShowPartnerSuggestions(false);
+    }
+  }, [watchedDoublesPartner, members, currentEventId]);
+
+  // Check if current player is already registered as a partner in someone else's doubles registration
+  useEffect(() => {
+    if (currentEventId === "club-champs" && watchedPlayerName && watchedPlayerName.trim() !== "") {
+      const partnerReg = registeredMembers.find(reg => {
+        const extra = reg.extra_json || {};
+        const partner = extra.doubles_partner;
+        const eventTypes = extra.event_types || {};
+        
+        return eventTypes.doubles && 
+               partner && 
+               partner.toLowerCase().trim() === watchedPlayerName.toLowerCase().trim();
+      });
+      
+      setExistingPartnerRegistration(partnerReg);
+    } else {
+      setExistingPartnerRegistration(null);
+    }
+  }, [watchedPlayerName, registeredMembers, currentEventId]);
+
   const sendVerificationEmail = async (email: string, playerName: string) => {
     setIsSendingEmail(true);
     try {
@@ -1304,6 +1380,11 @@ const golfFoursomes: Foursome[] = useMemo(() => {
   const selectMember = (name: string) => {
     setValue("player_name", name);
     setShowSuggestions(false);
+  };
+
+  const selectPartner = (name: string) => {
+    setValue("doubles_partner", name);
+    setShowPartnerSuggestions(false);
   };
 
   // Enhanced registration display
@@ -1493,6 +1574,127 @@ const golfFoursomes: Foursome[] = useMemo(() => {
           
           setSuccessMessage(message);
           setSubmitSuccess(true);
+          loadRegistrationData();
+          reset();
+          setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
+          
+          setTimeout(() => {
+            setSubmitSuccess(false);
+            setSuccessMessage("");
+          }, 5000);
+        } else {
+          setSubmitError(result.error || "Registration failed");
+        }
+      } else if (currentEventId === "club-champs") {
+        // Handle Club Championships - Singles and/or Doubles
+        const { player_name, email, event_types, event_types_doubles, singles_division, doubles_division, doubles_partner, comments, ...extraFields } = data;
+
+        // Validate that at least one event type is selected
+        if (!event_types && !event_types_doubles) {
+          setSubmitError("Please select at least one event type (Singles or Doubles)");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Validate division selection for selected event types
+        if (event_types && !singles_division) {
+          setSubmitError("Please select a division for Singles");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (event_types_doubles && !doubles_division) {
+          setSubmitError("Please select a division for Doubles");
+          setIsSubmitting(false);
+          return;
+        }
+
+        // Validate that partner is specified and is a member if doubles is selected
+        if (event_types_doubles) {
+          if (!doubles_partner || doubles_partner.trim() === "") {
+            setSubmitError("Please enter your doubles partner name");
+            setIsSubmitting(false);
+            return;
+          }
+          
+          const isPartnerValidMember = members.some(
+            (m) => m.name.toLowerCase() === doubles_partner.toLowerCase().trim()
+          );
+          if (!isPartnerValidMember) {
+            setSubmitError("Doubles partner must be a valid club member. Please select from the suggestions.");
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        // Check for duplicate registrations - prevent registering for same event type twice
+        const existingRegistrations = registeredMembers.filter(reg => 
+          reg.player_name?.toLowerCase().trim() === player_name?.toLowerCase().trim()
+        );
+
+        for (const reg of existingRegistrations) {
+          const extra = reg.extra_json || {};
+          const existingEventTypes = extra.event_types || {};
+          
+          if (event_types && existingEventTypes.singles) {
+            setSubmitError(`${player_name} is already registered for Singles`);
+            setIsSubmitting(false);
+            return;
+          }
+          
+          if (event_types_doubles && existingEventTypes.doubles) {
+            setSubmitError(`${player_name} is already registered for Doubles`);
+            setIsSubmitting(false);
+            return;
+          }
+        }
+
+        // Also check if player is already registered as a partner in someone else's doubles registration
+        if (event_types_doubles && existingPartnerRegistration) {
+          setSubmitError(`${player_name} is already registered for Doubles with ${existingPartnerRegistration.player_name}`);
+          setIsSubmitting(false);
+          return;
+        }
+
+        const events = [];
+        if (event_types) events.push(`Singles (${singles_division})`);
+        if (event_types_doubles) events.push(`Doubles (${doubles_division})`);
+
+        const registrationData = {
+          timestamp: new Date().toISOString(),
+          event_id: currentEventId,
+          event_name: eventConfig.name,
+          player_name: player_name || "",
+          email: email || "",
+          comments,
+          extra_json: {
+            ...extraFields,
+            event_types: {
+              singles: event_types || false,
+              doubles: event_types_doubles || false
+            },
+            singles_division: event_types ? singles_division : null,
+            doubles_division: event_types_doubles ? doubles_division : null,
+            doubles_partner: event_types_doubles ? (doubles_partner || "TBD") : null,
+            events_summary: events.join(", ")
+          },
+          registration_number: registrationCount + 1,
+          is_waiting_list: isWaitingList,
+          verification_token: verificationToken || undefined,
+        };
+
+        const result = await apiCall("submit_registration", registrationData);
+
+        if (result.success) {
+          let message = `Successfully registered ${data.player_name} for ${events.join(" and ")}`;
+          if (isWaitingList) {
+            message += ' (added to waiting list)';
+          }
+          
+          setSuccessMessage(message);
+          setSubmitSuccess(true);
+          setRegistrationCount(prev => prev + 1);
+          setTotalGolfers(prev => prev + 1);
           loadRegistrationData();
           reset();
           setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
@@ -2197,6 +2399,240 @@ const golfFoursomes: Foursome[] = useMemo(() => {
   </div>
 )}
 
+{/* Club Championships Fields */}
+{currentEventId === "club-champs" && (
+  <div className="space-y-6">
+    {/* Player Name with member suggestions */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Player Name *
+      </label>
+      <div className="relative">
+        <input
+          {...register("player_name", { required: "Player name is required" })}
+          type="text"
+          className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
+            (errors as any)?.player_name ? "border-red-500" : "border-gray-300"
+          }`}
+          placeholder="Start typing your name"
+          onChange={(e) => setValue("player_name", e.target.value)}
+        />
+        {showSuggestions && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+            {isLoadingMembers ? (
+              <div className="p-3 text-center text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                Loading members...
+              </div>
+            ) : filteredMembers.length > 0 ? (
+              filteredMembers.map((m, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => selectMember(m.name)}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                >
+                  {m.name}
+                </button>
+              ))
+            ) : (
+              <div className="p-3 text-sm text-gray-500">No matching members found</div>
+            )}
+          </div>
+        )}
+      </div>
+      {(errors as any)?.player_name && (
+        <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+          <AlertCircle className="w-4 h-4" />
+          <span>{(errors as any).player_name.message}</span>
+        </p>
+      )}
+    </div>
+
+    {/* Email */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Email Address *
+      </label>
+      <input
+        {...register("email", {
+          required: "Email is required",
+          pattern: { value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/, message: "Please enter a valid email address" }
+        })}
+        type="email"
+        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
+          (errors as any)?.email ? "border-red-500" : "border-gray-300"
+        }`}
+        placeholder="your.email@example.com"
+      />
+      {(errors as any)?.email && (
+        <p className="mt-1 text-sm text-red-600 flex items-center gap-1">
+          <AlertCircle className="w-4 h-4" />
+          <span>{(errors as any).email.message}</span>
+        </p>
+      )}
+    </div>
+
+    {/* Existing Partner Registration Notification */}
+    {existingPartnerRegistration && (
+      <div className="border border-blue-300 rounded-lg p-4 bg-blue-50">
+        <div className="flex items-start gap-3">
+          <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-semibold text-blue-900">Already Registered for Doubles</h4>
+            <p className="text-sm text-blue-800 mt-1">
+              You are already registered for Doubles (
+              {existingPartnerRegistration.extra_json?.doubles_division || "Division TBD"}) 
+              with <strong>{existingPartnerRegistration.player_name}</strong>
+            </p>
+            <p className="text-xs text-blue-700 mt-2">
+              You can still register for Singles if you'd like to compete in both events.
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
+    {/* Event Type Selection */}
+    <div className="border rounded-lg p-4 bg-gray-50">
+      <h3 className="text-md font-semibold text-gray-900 mb-3">Select Event Type(s) *</h3>
+      <div className="space-y-3">
+        {/* Singles Checkbox */}
+        <div className="flex items-start gap-3">
+          <input
+            {...register("event_types")}
+            type="checkbox"
+            id="event_types_singles"
+            className={`mt-1 w-5 h-5 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring}`}
+          />
+          <label htmlFor="event_types_singles" className="flex-1">
+            <span className="font-medium text-gray-900">Singles</span>
+            <p className="text-sm text-gray-600">Compete individually in your division</p>
+          </label>
+        </div>
+
+        {/* Singles Division (conditional) */}
+        {watchedEventTypesSingles && (
+          <div className="ml-8 mb-3">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Singles Division *
+            </label>
+            <select
+              {...register("singles_division")}
+              className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
+                (errors as any)?.singles_division ? "border-red-500" : "border-gray-300"
+              }`}
+            >
+              <option value="">Select Division</option>
+              <option value="A">A Division</option>
+              <option value="B">B Division</option>
+              <option value="C">C Division</option>
+              <option value="D">D Division</option>
+              <option value="60+">60+ Division</option>
+            </select>
+          </div>
+        )}
+
+        {/* Doubles Checkbox */}
+        <div className="flex items-start gap-3">
+          <input
+            {...register("event_types_doubles")}
+            type="checkbox"
+            id="event_types_doubles"
+            disabled={!!existingPartnerRegistration}
+            className={`mt-1 w-5 h-5 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring} ${existingPartnerRegistration ? 'opacity-50 cursor-not-allowed' : ''}`}
+          />
+          <label htmlFor="event_types_doubles" className={`flex-1 ${existingPartnerRegistration ? 'opacity-50' : ''}`}>
+            <span className="font-medium text-gray-900">Doubles</span>
+            <p className="text-sm text-gray-600">
+              {existingPartnerRegistration 
+                ? "Already registered (see above)" 
+                : "Compete with a partner in your division"}
+            </p>
+          </label>
+        </div>
+
+        {/* Doubles Division and Partner (conditional) */}
+        {watchedEventTypesDoubles && (
+          <div className="ml-8 space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Doubles Division *
+              </label>
+              <select
+                {...register("doubles_division")}
+                className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent ${
+                  (errors as any)?.doubles_division ? "border-red-500" : "border-gray-300"
+                }`}
+              >
+                <option value="">Select Division</option>
+                <option value="A">A Division</option>
+                <option value="B">B Division</option>
+                <option value="C">C Division</option>
+                <option value="D">D Division</option>
+                <option value="60+">60+ Division</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Doubles Partner *
+              </label>
+              <div className="relative">
+                <input
+                  {...register("doubles_partner")}
+                  type="text"
+                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent border-gray-300`}
+                  placeholder="Start typing partner name"
+                  onChange={(e) => setValue("doubles_partner", e.target.value)}
+                />
+                {showPartnerSuggestions && (
+                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {isLoadingMembers ? (
+                      <div className="p-3 text-center text-gray-500">
+                        <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                        Loading members...
+                      </div>
+                    ) : filteredPartners.length > 0 ? (
+                      filteredPartners.map((m, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => selectPartner(m.name)}
+                          className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                        >
+                          {m.name}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="p-3 text-sm text-gray-500">No matching members found</div>
+                    )}
+                  </div>
+                )}
+              </div>
+              <p className="mt-1 text-xs text-gray-500">
+                Both players must be club members. Select from the suggestions.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    {/* Comments */}
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-2">
+        Comments (Optional)
+      </label>
+      <textarea
+        {...register("comments")}
+        className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent resize-none border-gray-300`}
+        placeholder="Any additional comments or requests..."
+        rows={3}
+      />
+    </div>
+  </div>
+)}
+
                   {/* Success Message */}
                   {submitSuccess && successMessage && (
                     <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
@@ -2447,6 +2883,124 @@ const golfFoursomes: Foursome[] = useMemo(() => {
                         ))}
                       </div>
                     )
+) : currentEventId === "club-champs" ? (
+  (() => {
+    // Group Club Championships registrations by event type and division
+    const singlesGroups: Record<string, any[]> = { A: [], B: [], C: [], D: [], "60+": [] };
+    const doublesGroups: Record<string, any[]> = { A: [], B: [], C: [], D: [], "60+": [] };
+
+    registeredMembers.forEach((member: any) => {
+      const extra = member.extra_json || {};
+      const eventTypes = extra.event_types || {};
+      
+      if (eventTypes.singles && extra.singles_division) {
+        const div = extra.singles_division;
+        if (singlesGroups[div]) {
+          singlesGroups[div].push({ ...member, type: 'singles' });
+        }
+      }
+      
+      if (eventTypes.doubles && extra.doubles_division) {
+        const div = extra.doubles_division;
+        if (doublesGroups[div]) {
+          doublesGroups[div].push({ 
+            ...member, 
+            type: 'doubles',
+            partner: extra.doubles_partner || "TBD"
+          });
+        }
+      }
+    });
+
+    const divisions = ["A", "B", "C", "D", "60+"];
+
+    return (
+      <div className="space-y-6">
+        {/* Singles Section */}
+        {Object.values(singlesGroups).some((g: any[]) => g.length > 0) && (
+          <div>
+            <h4 className="text-md font-bold text-indigo-700 mb-3 flex items-center gap-2 border-b pb-2">
+              <Users className="w-4 h-4" />
+              Singles
+            </h4>
+            <div className="space-y-4">
+              {divisions.map(div => {
+                const players = singlesGroups[div];
+                if (players.length === 0) return null;
+                
+                return (
+                  <div key={`singles-${div}`}>
+                    <div className="text-sm font-semibold text-gray-700 mb-2 flex items-center justify-between">
+                      <span>Division {div}</span>
+                      <span className="text-xs px-2 py-1 rounded bg-indigo-100 text-indigo-600">
+                        {players.length} player{players.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="space-y-1 ml-2">
+                      {players.map((player: any, idx: number) => (
+                        <div key={idx} className="text-sm px-3 py-2 bg-indigo-50 rounded border border-indigo-100 flex items-center justify-between">
+                          <span className="text-gray-800">{player.player_name}</span>
+                          <span className="text-xs text-gray-500">#{player.registration_number}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Doubles Section */}
+        {Object.values(doublesGroups).some((g: any[]) => g.length > 0) && (
+          <div>
+            <h4 className="text-md font-bold text-purple-700 mb-3 flex items-center gap-2 border-b pb-2">
+              <Users className="w-4 h-4" />
+              Doubles
+            </h4>
+            <div className="space-y-4">
+              {divisions.map(div => {
+                const teams = doublesGroups[div];
+                if (teams.length === 0) return null;
+                
+                return (
+                  <div key={`doubles-${div}`}>
+                    <div className="text-sm font-semibold text-gray-700 mb-2 flex items-center justify-between">
+                      <span>Division {div}</span>
+                      <span className="text-xs px-2 py-1 rounded bg-purple-100 text-purple-600">
+                        {teams.length} team{teams.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="space-y-1 ml-2">
+                      {teams.map((team: any, idx: number) => (
+                        <div key={idx} className="text-sm px-3 py-2 bg-purple-50 rounded border border-purple-100">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="font-medium text-gray-800">{team.player_name}</span>
+                            <span className="text-xs text-gray-500">#{team.registration_number}</span>
+                          </div>
+                          <div className="text-xs text-gray-600 ml-2">
+                            Partner: {team.partner}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* No registrations message */}
+        {Object.values(singlesGroups).every((g: any[]) => g.length === 0) && 
+         Object.values(doublesGroups).every((g: any[]) => g.length === 0) && (
+          <div className="text-sm text-gray-500 text-center py-8">
+            No registrations yet
+          </div>
+        )}
+      </div>
+    );
+  })()
 ) : (
   (() => {
 // Group by status for other events (PDL, etc.)
