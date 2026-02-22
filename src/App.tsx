@@ -53,7 +53,7 @@ function renderFormat(format: string | string[]): JSX.Element | null {
    Types
 ========================= */
 
-type FieldType = "text" | "email" | "select" | "radio" | "textarea" | "checkbox";
+type FieldType = "text" | "email" | "select" | "radio" | "textarea" | "checkbox" | "additional_members";
 
 interface FieldConfig {
   name: string;
@@ -68,6 +68,10 @@ interface FieldConfig {
     minLength?: number;
     maxLength?: number;
   };
+  // additional_members field config
+  maxAdditional?: number;
+  memberLabels?: string[];
+  requireMemberValidation?: boolean;
 }
 
 interface EventConfig {
@@ -519,6 +523,19 @@ const extractTeamInfo = (r: any): TeamInfo => {
     };
   }
   
+  // Generic team_members format (from additional_members field)
+  if (Array.isArray(extra?.team_members) && extra.team_members.length > 0) {
+    const names = extra.team_members
+      .map((n: any) => (typeof n === "string" ? n : n?.name || "").trim())
+      .filter(Boolean);
+    return {
+      names: names.length ? names : (r?.player_name ? [r.player_name.trim()] : ["Registrant"]),
+      teamSize: names.length || 1,
+      isGolf: false,
+      dinnerCount: 0
+    };
+  }
+
   const names = [];
   
   if (r?.player_name) {
@@ -767,6 +784,9 @@ const EventConfigForm: React.FC<{
       required: true,
       placeholder: "",
       options: [],
+      maxAdditional: undefined,
+      memberLabels: undefined,
+      requireMemberValidation: undefined,
     });
     setOptionInput("");
   };
@@ -1303,7 +1323,22 @@ const EventConfigForm: React.FC<{
                   </label>
                   <select
                     value={fieldForm.type}
-                    onChange={(e) => setFieldForm({ ...fieldForm, type: e.target.value as FieldType })}
+                    onChange={(e) => {
+                      const newType = e.target.value as FieldType;
+                      const base = { ...fieldForm, type: newType };
+                      if (newType === "additional_members") {
+                        setFieldForm({
+                          ...base,
+                          name: fieldForm.name || "additional_team_members",
+                          label: fieldForm.label || "Team Members",
+                          maxAdditional: fieldForm.maxAdditional ?? 1,
+                          memberLabels: fieldForm.memberLabels ?? ["Partner"],
+                          requireMemberValidation: fieldForm.requireMemberValidation ?? true,
+                        });
+                      } else {
+                        setFieldForm(base);
+                      }
+                    }}
                     className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
                   >
                     <option value="text">Text</option>
@@ -1312,6 +1347,7 @@ const EventConfigForm: React.FC<{
                     <option value="select">Dropdown</option>
                     <option value="radio">Radio Buttons</option>
                     <option value="checkbox">Checkbox</option>
+                    <option value="additional_members">Team / Additional Members</option>
                   </select>
                 </div>
 
@@ -1353,6 +1389,58 @@ const EventConfigForm: React.FC<{
                   Required field
                 </label>
               </div>
+
+              {/* Config for additional_members type */}
+              {fieldForm.type === "additional_members" && (
+                <div className="space-y-3 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                  <h5 className="text-sm font-medium text-indigo-900">Team Sign-up Configuration</h5>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Max additional team members
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={10}
+                      value={fieldForm.maxAdditional ?? 1}
+                      onChange={(e) => setFieldForm({
+                        ...fieldForm,
+                        maxAdditional: Math.min(10, Math.max(1, parseInt(e.target.value) || 1)),
+                      })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      1 = one partner (e.g. doubles), 2+ = larger teams
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">
+                      Labels per slot (comma-separated)
+                    </label>
+                    <input
+                      type="text"
+                      value={(fieldForm.memberLabels ?? ["Partner"]).join(", ")}
+                      onChange={(e) => setFieldForm({
+                        ...fieldForm,
+                        memberLabels: e.target.value.split(",").map(s => s.trim()).filter(Boolean),
+                      })}
+                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Partner, Player 3, Player 4"
+                    />
+                  </div>
+                  <div>
+                    <label className="flex items-center text-sm">
+                      <input
+                        type="checkbox"
+                        checked={fieldForm.requireMemberValidation ?? true}
+                        onChange={(e) => setFieldForm({ ...fieldForm, requireMemberValidation: e.target.checked })}
+                        className="w-4 h-4 text-indigo-600 border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 mr-2"
+                      />
+                      Require members list validation for team members
+                    </label>
+                  </div>
+                </div>
+              )}
 
               {/* Options for select/radio types */}
               {(fieldForm.type === "select" || fieldForm.type === "radio") && (
@@ -1417,6 +1505,9 @@ const EventConfigForm: React.FC<{
                         required: true,
                         placeholder: "",
                         options: [],
+                        maxAdditional: undefined,
+                        memberLabels: undefined,
+                        requireMemberValidation: undefined,
                       });
                     }}
                     className="px-4 py-2 border border-gray-300 text-gray-700 text-sm rounded hover:bg-gray-50"
@@ -1747,7 +1838,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
     [eventConfig?.ui?.theme?.primary]
   );
 
-  const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwayR6CzmaI-nwg48TrDPV04xnDvw55ejDXexGRB76gzyQAjzGf4A-IXuGmoV-yPhak/exec";
+  const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwheCy89SdRcfXWgYXqQnrrnR-aZ-x-YnCnyRixmn-MHMLz5sA4IrGgihvqb-8iOjMq/exec";
 
   const { register, handleSubmit, formState: { errors }, setValue, watch, reset } = useForm();
 
@@ -1771,6 +1862,8 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [filteredPartners, setFilteredPartners] = useState<Member[]>([]);
   const [showPartnerSuggestions, setShowPartnerSuggestions] = useState(false);
+  const [activeAdditionalMemberSlot, setActiveAdditionalMemberSlot] = useState<number | null>(null);
+  const [filteredAdditionalMembers, setFilteredAdditionalMembers] = useState<Member[]>([]);
   const [existingPartnerRegistration, setExistingPartnerRegistration] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -2002,6 +2095,14 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
     loadEventConfigs();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionally empty - load configs only on mount
+
+  const resetForm = () => {
+    reset();
+    const addField = eventConfig?.fields?.find(f => f.type === "additional_members");
+    if (addField) {
+      setValue(addField.name + "_group_size", "2");
+    }
+  };
 
   const apiCall = async (action: string, params: Record<string, any> = {}): Promise<ApiResponse> => {
     try {
@@ -2246,6 +2347,14 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
     }
   }, [watchedDoublesPartner, members, currentEventId]);
 
+  // Set default group size for additional_members events
+  useEffect(() => {
+    const addField = eventConfig?.fields?.find(f => f.type === "additional_members");
+    if (addField) {
+      setValue(addField.name + "_group_size", "2");
+    }
+  }, [currentEventId, eventConfig?.fields, setValue]);
+
   // Check if current player is already registered as a partner in someone else's doubles registration
   useEffect(() => {
     if (currentEventId === "club-champs" && watchedPlayerName && watchedPlayerName.trim() !== "") {
@@ -2458,7 +2567,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           setSuccessMessage(message);
           setSubmitSuccess(true);
           loadRegistrationData();
-          reset();
+          resetForm();
           setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
           
           setTimeout(() => {
@@ -2579,9 +2688,118 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           setRegistrationCount(prev => prev + 1);
           setTotalGolfers(prev => prev + 1);
           loadRegistrationData();
-          reset();
+          resetForm();
           setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
           
+          setTimeout(() => {
+            setSubmitSuccess(false);
+            setSuccessMessage("");
+          }, 5000);
+        } else {
+          setSubmitError(result.error || "Registration failed");
+        }
+      } else if (eventConfig?.fields?.some(f => f.type === "additional_members")) {
+        // Generic team sign-up (events with additional_members field)
+        const additionalMembersField = eventConfig.fields.find(f => f.type === "additional_members")!;
+        const groupSize = Math.min(
+          (additionalMembersField.maxAdditional ?? 1) + 1,
+          Math.max(1, parseInt(data[additionalMembersField.name + "_group_size"]) || 1)
+        );
+        const teamMembers: string[] = [];
+        if (data.player_name && String(data.player_name).trim()) {
+          teamMembers.push(String(data.player_name).trim());
+        }
+        for (let i = 1; i < groupSize; i++) {
+          const name = data[additionalMembersField.name + "_" + i];
+          if (name && String(name).trim()) {
+            teamMembers.push(String(name).trim());
+          }
+        }
+
+        if (teamMembers.length === 0) {
+          setSubmitError("Please enter at least one team member name");
+          setIsSubmitting(false);
+          return;
+        }
+
+        if (additionalMembersField.requireMemberValidation && eventConfig?.rules?.requireMembership) {
+          for (let i = 0; i < teamMembers.length; i++) {
+            const valid = members.some(m => m.name.toLowerCase() === teamMembers[i].toLowerCase());
+            if (!valid) {
+              setSubmitError(`${teamMembers[i]} must be a valid club member`);
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        }
+
+        if (!eventConfig?.rules?.allowDuplicates) {
+          for (const name of teamMembers) {
+            const dup = await apiCall("checkDuplicate", { event_id: currentEventId, playerName: name });
+            if (dup.success && dup.isDuplicate) {
+              setSubmitError(`${name} is already registered for this event`);
+              setIsSubmitting(false);
+              return;
+            }
+          }
+        }
+
+        const { player_name, email, phone, division, wall, comments, clinic_week, survivor_week, week, preferred_partner, ...extraFields } = data;
+        const cleanExtra: Record<string, unknown> = {};
+        const teamPrefix = additionalMembersField.name + "_";
+        Object.entries(extraFields).forEach(([k, v]) => {
+          if (!k.startsWith(teamPrefix)) cleanExtra[k] = v;
+        });
+
+        const registrationData = {
+          timestamp: new Date().toISOString(),
+          event_id: currentEventId,
+          event_name: eventConfig.name,
+          player_name: teamMembers[0] || "",
+          email: (email || "").trim(),
+          phone: phone || "",
+          division: division || "",
+          wall: wall || "",
+          comments: comments || "",
+
+          ...(eventConfig?.isRecurring && (clinic_week || survivor_week || week) ? {
+            [clinic_week ? "clinic_week" : survivor_week ? "survivor_week" : "week"]: clinic_week || survivor_week || week
+          } : {}),
+
+          extra_json: {
+            ...cleanExtra,
+            ...(preferred_partner ? { preferred_partner } : {}),
+            team_members: teamMembers,
+            team_size: teamMembers.length,
+            ...(eventConfig?.isRecurring && (clinic_week || survivor_week || week) ? {
+              [clinic_week ? "clinic_week" : survivor_week ? "survivor_week" : "week"]: clinic_week || survivor_week || week
+            } : {}),
+          },
+
+          registration_number: registrationCount + 1,
+          is_waiting_list: isWaitingList,
+          verification_token: verificationToken || undefined,
+        };
+
+        const result = await apiCall("submit_registration", registrationData);
+
+        if (result.success) {
+          let message = `Successfully registered ${teamMembers.length} team member${teamMembers.length > 1 ? "s" : ""}`;
+          if (eventConfig?.isRecurring && (data.clinic_week || data.survivor_week || data.week)) {
+            message += ` for ${data.clinic_week || data.survivor_week || data.week}`;
+          }
+          if (isWaitingList) {
+            message += " (added to waiting list)";
+          }
+
+          setSuccessMessage(message);
+          setSubmitSuccess(true);
+          setRegistrationCount(prev => prev + 1);
+          setTotalGolfers(prev => prev + teamMembers.length);
+          loadRegistrationData();
+          resetForm();
+          setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
+
           setTimeout(() => {
             setSubmitSuccess(false);
             setSuccessMessage("");
@@ -2636,7 +2854,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           setRegistrationCount(prev => prev + 1);
           setTotalGolfers(prev => prev + 1);
           loadRegistrationData();
-          reset();
+          resetForm();
           setIsVerified(!(eventConfig?.notifications?.requireEmailVerification));
           
           setTimeout(() => {
@@ -3145,6 +3363,78 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                   <AlertCircle className="w-4 h-4" />
                                   <span>{errMsg}</span>
                                 </p>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // additional_members field type - team sign-up UI
+                        if (field.type === "additional_members") {
+                          const maxAdd = Math.min(10, Math.max(1, field.maxAdditional ?? 1));
+                          const labels = field.memberLabels && field.memberLabels.length >= maxAdd
+                            ? field.memberLabels.slice(0, maxAdd)
+                            : Array.from({ length: maxAdd }, (_, i) => i === 0 ? "Partner" : `Player ${i + 2}`);
+                          const groupSize = parseInt(watch(field.name + "_group_size") || "1") || 1;
+                          return (
+                            <div key={field.name} className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                              <h4 className="text-sm font-medium text-gray-700">{field.label}</h4>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                  How many on your team? *
+                                </label>
+                                <select
+                                  {...register(field.name + "_group_size", { required: true })}
+                                  className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent border-gray-300`}
+                                >
+                                  {Array.from({ length: maxAdd + 1 }, (_, i) => i + 1).map(n => (
+                                    <option key={n} value={n}>{n}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              {groupSize > 1 && (
+                                <div className="space-y-3">
+                                  {Array.from({ length: groupSize - 1 }, (_, i) => {
+                                    const slotKey = field.name + "_" + (i + 1);
+                                    const slotValue = watch(slotKey) || "";
+                                    const filtered = field.requireMemberValidation
+                                      ? members.filter(m => m.name.toLowerCase().includes(slotValue.toLowerCase()))
+                                      : [];
+                                    return (
+                                      <div key={slotKey}>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                          {labels[i] || `Player ${i + 2}`} *
+                                        </label>
+                                        <div className="relative">
+                                          <input
+                                            {...register(slotKey, { required: groupSize > 1 })}
+                                            type="text"
+                                            className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent border-gray-300`}
+                                            placeholder={field.requireMemberValidation ? "Start typing name" : "Name"}
+                                            onFocus={() => setActiveAdditionalMemberSlot(i)}
+                                            onBlur={() => setTimeout(() => setActiveAdditionalMemberSlot(null), 200)}
+                                          />
+                                          {field.requireMemberValidation && activeAdditionalMemberSlot === i && filtered.length > 0 && (
+                                            <div className="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                                              {filtered.map((m, idx) => (
+                                                <button
+                                                  key={idx}
+                                                  type="button"
+                                                  onClick={() => {
+                                                    setValue(slotKey, m.name);
+                                                    setActiveAdditionalMemberSlot(null);
+                                                  }}
+                                                  className="w-full px-4 py-2 text-left hover:bg-gray-100 focus:bg-gray-100 focus:outline-none"
+                                                >
+                                                  {m.name}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               )}
                             </div>
                           );
@@ -3832,19 +4122,25 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                               Confirmed ({confirmedRegistrations.length})
                             </h4>
                             <div className="space-y-2">
-                              {confirmedRegistrations.map((member: any, index: number) => (
+                              {confirmedRegistrations.map((member: any, index: number) => {
+                                const team = extractTeamInfo(member);
+                                const displayName = team.names.length > 1
+                                  ? team.names.join(" / ")
+                                  : (member.player_name || "Registrant");
+                                return (
                                 <div
                                   key={`confirmed-${index}`}
                                   className="flex items-center justify-between p-3 bg-green-50 rounded border border-green-200"
                                 >
                                   <div className="min-w-0 truncate text-sm text-green-800">
-                                    {member.player_name || "Registrant"}
+                                    {displayName}
                                   </div>
                                   <div className="flex-shrink-0 text-xs text-green-600">
                                     <span>{formatCondensedTimestamp(member.timestamp)}</span>
                                   </div>
                                 </div>
-                              ))}
+                              );
+                              })}
                             </div>
                           </div>
                         )}
@@ -3856,19 +4152,25 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                               Waiting List ({waitingListRegistrations.length})
                             </h4>
                             <div className="space-y-2">
-                              {waitingListRegistrations.map((member: any, index: number) => (
+                              {waitingListRegistrations.map((member: any, index: number) => {
+                                const team = extractTeamInfo(member);
+                                const displayName = team.names.length > 1
+                                  ? team.names.join(" / ")
+                                  : (member.player_name || "Registrant");
+                                return (
                                 <div
                                   key={`waiting-${index}`}
                                   className="flex items-center justify-between p-3 bg-orange-50 rounded border border-orange-200"
                                 >
                                   <div className="min-w-0 truncate text-sm text-orange-800">
-                                    {member.player_name || "Registrant"}
+                                    {displayName}
                                   </div>
                                   <div className="flex-shrink-0 text-xs text-orange-600">
                                     <span>{formatCondensedTimestamp(member.timestamp)}</span>
                                   </div>
                                 </div>
-                              ))}
+                              );
+                              })}
                             </div>
                           </div>
                         )}
@@ -3903,7 +4205,7 @@ const DefaultEventRedirect: React.FC = () => {
   useEffect(() => {
     const loadDefaultEvent = async () => {
       try {
-        const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwayR6CzmaI-nwg48TrDPV04xnDvw55ejDXexGRB76gzyQAjzGf4A-IXuGmoV-yPhak/exec";
+        const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwheCy89SdRcfXWgYXqQnrrnR-aZ-x-YnCnyRixmn-MHMLz5sA4IrGgihvqb-8iOjMq/exec";
         
         if (!GAS_URL || GAS_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL")) {
           setDefaultEventId(getMostRecentEventId(DEFAULT_EVENT_CONFIGS));
