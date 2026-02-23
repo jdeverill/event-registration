@@ -549,6 +549,7 @@ const extractTeamInfo = (r: any): TeamInfo => {
     extra?.player2 || r?.player2,
     extra?.partner || r?.partner,
     extra?.partner_name || r?.partner_name,
+    extra?.doubles_partner || r?.doubles_partner,
     extra?.teammate || r?.teammate,
     extra?.teammate_name || r?.teammate_name,
   ];
