@@ -2620,33 +2620,44 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           }
         }
 
-        // Check for duplicate registrations - prevent registering for same event type twice
-        const existingRegistrations = registeredMembers.filter(reg => 
+        // Check for duplicate registrations - prevent same event type in same division only
+        const existingRegistrations = registeredMembers.filter(reg =>
           reg.player_name?.toLowerCase().trim() === player_name?.toLowerCase().trim()
         );
 
         for (const reg of existingRegistrations) {
           const extra = reg.extra_json || {};
           const existingEventTypes = extra.event_types || {};
-          
-          if (event_types && existingEventTypes.singles) {
-            setSubmitError(`${player_name} is already registered for Singles`);
+
+          if (event_types && existingEventTypes.singles && extra.singles_division === singles_division) {
+            setSubmitError(`${player_name} is already registered for Singles (${singles_division})`);
             setIsSubmitting(false);
             return;
           }
-          
-          if (event_types_doubles && existingEventTypes.doubles) {
-            setSubmitError(`${player_name} is already registered for Doubles`);
+
+          if (event_types_doubles && existingEventTypes.doubles && extra.doubles_division === doubles_division) {
+            setSubmitError(`${player_name} is already registered for Doubles (${doubles_division})`);
             setIsSubmitting(false);
             return;
           }
         }
 
-        // Also check if player is already registered as a partner in someone else's doubles registration
-        if (event_types_doubles && existingPartnerRegistration) {
-          setSubmitError(`${player_name} is already registered for Doubles with ${existingPartnerRegistration.player_name}`);
-          setIsSubmitting(false);
-          return;
+        // Block only if already registered as partner in the SAME doubles division
+        if (event_types_doubles) {
+          const partnerRegInSameDivision = registeredMembers.find(reg => {
+            const extra = reg.extra_json || {};
+            const partner = extra.doubles_partner;
+            const eventTypes = extra.event_types || {};
+            return eventTypes.doubles &&
+              partner &&
+              partner.toLowerCase().trim() === player_name?.toLowerCase().trim() &&
+              extra.doubles_division === doubles_division;
+          });
+          if (partnerRegInSameDivision) {
+            setSubmitError(`${player_name} is already registered for Doubles (${doubles_division}) with ${partnerRegInSameDivision.player_name}`);
+            setIsSubmitting(false);
+            return;
+          }
         }
 
         const events = [];
@@ -3450,14 +3461,14 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                   <div className="flex items-start gap-3">
                                     <CheckCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                                     <div>
-                                      <h4 className="font-semibold text-blue-900">Already Registered for Doubles</h4>
+                                      <h4 className="font-semibold text-blue-900">Already registered for Doubles (one division)</h4>
                                       <p className="text-sm text-blue-800 mt-1">
                                         You are already registered for Doubles (
-                                        {existingPartnerRegistration.extra_json?.doubles_division || "Division TBD"}) 
-                                        with <strong>{existingPartnerRegistration.player_name}</strong>
+                                        {existingPartnerRegistration.extra_json?.doubles_division || "Division TBD"})
+                                        with <strong>{existingPartnerRegistration.player_name}</strong>.
                                       </p>
                                       <p className="text-xs text-blue-700 mt-2">
-                                        You can still register for Singles if you'd like to compete in both events.
+                                        You can register for Singles and/or Doubles in other divisions (A, B, C, D, 60+).
                                       </p>
                                     </div>
                                   </div>
@@ -3501,14 +3512,13 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                     {...register("event_types_doubles")}
                                     type="checkbox"
                                     id="event_types_doubles"
-                                    disabled={!!existingPartnerRegistration}
-                                    className={`mt-1 w-5 h-5 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring} ${existingPartnerRegistration ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                    className={`mt-1 w-5 h-5 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring}`}
                                   />
-                                  <label htmlFor="event_types_doubles" className={`flex-1 ${existingPartnerRegistration ? 'opacity-50' : ''}`}>
+                                  <label htmlFor="event_types_doubles" className="flex-1">
                                     <span className="font-medium text-gray-900">Doubles</span>
                                     <p className="text-sm text-gray-600">
-                                      {existingPartnerRegistration 
-                                        ? "Already registered (see above)" 
+                                      {existingPartnerRegistration
+                                        ? "You can add Doubles in another division (see above)"
                                         : "Compete with a partner in your division"}
                                     </p>
                                   </label>
