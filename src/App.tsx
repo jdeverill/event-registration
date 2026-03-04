@@ -2959,7 +2959,12 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                   return false;
                 }
                 
-                // Filter by registration close time
+                // When "Show in Header" is explicitly checked, always show in selector
+                if (config.showInHeader === true) {
+                  return true;
+                }
+                
+                // Otherwise filter by registration close time (default: hide 7 days after close)
                 if (!config.registrationCloseTime || config.registrationCloseTime === "") {
                   return true;
                 }
