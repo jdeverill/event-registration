@@ -224,7 +224,7 @@ const DEFAULT_EVENT_CONFIGS: Record<string, EventConfig> = {
     location: "KWRC Squash Courts",
     format: [
       "Sign up for Singles, Doubles, or Both",
-      "Divisions: A, B, C, D, and 60+",
+      "Singles divisions: A, B, C, D. Doubles divisions: A, B, C, D, 60+",
       "Players can register for multiple events",
       "For doubles: Partner can be selected later or specified now"
     ],
@@ -2602,19 +2602,13 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           return;
         }
 
-        // Validate that partner is specified and is a member if doubles is selected
-        if (event_types_doubles) {
-          if (!doubles_partner || doubles_partner.trim() === "") {
-            setSubmitError("Please enter your doubles partner name");
-            setIsSubmitting(false);
-            return;
-          }
-          
+        // If doubles and a partner is entered, partner must be a valid club member
+        if (event_types_doubles && doubles_partner && doubles_partner.trim() !== "") {
           const isPartnerValidMember = members.some(
             (m) => m.name.toLowerCase() === doubles_partner.toLowerCase().trim()
           );
           if (!isPartnerValidMember) {
-            setSubmitError("Doubles partner must be a valid club member. Please select from the suggestions.");
+            setSubmitError("Doubles partner must be a valid club member. Please select from the suggestions or leave blank to register as a single (we'll help find you a partner).");
             setIsSubmitting(false);
             return;
           }
@@ -3473,7 +3467,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                         with <strong>{existingPartnerRegistration.player_name}</strong>.
                                       </p>
                                       <p className="text-xs text-blue-700 mt-2">
-                                        You can register for Singles and/or Doubles in other divisions (A, B, C, D, 60+).
+                                        You can register for Singles (A, B, C, D) and/or Doubles in other divisions (A, B, C, D, 60+).
                                       </p>
                                     </div>
                                   </div>
@@ -3508,7 +3502,6 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                       <option value="B">B Division</option>
                                       <option value="C">C Division</option>
                                       <option value="D">D Division</option>
-                                      <option value="60+">60+ Division</option>
                                     </select>
                                   </div>
                                 )}
@@ -3519,14 +3512,14 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                     id="event_types_doubles"
                                     className={`mt-1 w-5 h-5 ${themeClasses.text} border-gray-300 rounded focus:ring-2 ${themeClasses.ring}`}
                                   />
-                                  <label htmlFor="event_types_doubles" className="flex-1">
-                                    <span className="font-medium text-gray-900">Doubles</span>
-                                    <p className="text-sm text-gray-600">
-                                      {existingPartnerRegistration
-                                        ? "You can add Doubles in another division (see above)"
-                                        : "Compete with a partner in your division"}
-                                    </p>
-                                  </label>
+                                    <label htmlFor="event_types_doubles" className="flex-1">
+                                      <span className="font-medium text-gray-900">Doubles</span>
+                                      <p className="text-sm text-gray-600">
+                                        {existingPartnerRegistration
+                                          ? "You can add Doubles in another division (see above)"
+                                          : "Compete with a partner, or register as a single and we'll help find you a partner"}
+                                      </p>
+                                    </label>
                                 </div>
                                 {watchedEventTypesDoubles && (
                                   <div className="ml-8 space-y-3">
@@ -3548,14 +3541,15 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                                     </div>
                                     <div>
                                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Doubles Partner *
+                                        Doubles Partner (optional)
                                       </label>
+                                      <p className="text-xs text-gray-500 mb-1">Leave blank to register as a single; we'll help match you with a partner.</p>
                                       <div className="relative">
                                         <input
                                           {...register("doubles_partner")}
                                           type="text"
                                           className={`w-full px-4 py-3 border rounded-lg focus:ring-2 ${themeClasses.ring} focus:border-transparent border-gray-300`}
-                                          placeholder="Start typing partner name"
+                                          placeholder="Partner name or leave blank"
                                           onChange={(e) => setValue("doubles_partner", e.target.value)}
                                         />
                                         {showPartnerSuggestions && (
@@ -3994,38 +3988,30 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                   )
                 ) : currentEventId === "club-champs" ? (
                   (() => {
-                    // Group Club Championships registrations by event type and division
-                    const singlesGroups: Record<string, any[]> = { A: [], B: [], C: [], D: [], "60+": [] };
+                    // Group Club Championships: singles A-D only, doubles A-D + 60+
+                    const singlesGroups: Record<string, any[]> = { A: [], B: [], C: [], D: [] };
                     const doublesGroups: Record<string, any[]> = { A: [], B: [], C: [], D: [], "60+": [] };
 
                     registeredMembers.forEach((member: any) => {
                       const extra = member.extra_json || {};
                       const eventTypes = extra.event_types || {};
                       
-                      if (eventTypes.singles && extra.singles_division) {
-                        const div = extra.singles_division;
-                        if (singlesGroups[div]) {
-                          singlesGroups[div].push({ ...member, type: 'singles' });
-                        }
+                      if (eventTypes.singles && extra.singles_division && singlesGroups[extra.singles_division]) {
+                        singlesGroups[extra.singles_division].push({ ...member, type: 'singles' });
                       }
                       
-                      if (eventTypes.doubles && extra.doubles_division) {
-                        const div = extra.doubles_division;
-                        if (doublesGroups[div]) {
-                          doublesGroups[div].push({ 
-                            ...member, 
-                            type: 'doubles',
-                            partner: extra.doubles_partner || "TBD"
-                          });
-                        }
+                      if (eventTypes.doubles && extra.doubles_division && doublesGroups[extra.doubles_division]) {
+                        doublesGroups[extra.doubles_division].push({ 
+                          ...member, 
+                          type: 'doubles',
+                          partner: extra.doubles_partner || "TBD"
+                        });
                       }
                     });
 
-                    const divisions = ["A", "B", "C", "D", "60+"];
-
                     return (
                       <div className="space-y-6">
-                        {/* Singles Section */}
+                        {/* Singles Section (A, B, C, D only) */}
                         {Object.values(singlesGroups).some((g: any[]) => g.length > 0) && (
                           <div>
                             <h4 className="text-md font-bold text-indigo-700 mb-3 flex items-center gap-2 border-b pb-2">
@@ -4033,7 +4019,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                               Singles
                             </h4>
                             <div className="space-y-4">
-                              {divisions.map(div => {
+                              {SINGLES_DIVISIONS.map(div => {
                                 const players = singlesGroups[div];
                                 if (players.length === 0) return null;
                                 
@@ -4060,7 +4046,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                           </div>
                         )}
 
-                        {/* Doubles Section */}
+                        {/* Doubles Section (A, B, C, D, 60+) */}
                         {Object.values(doublesGroups).some((g: any[]) => g.length > 0) && (
                           <div>
                             <h4 className="text-md font-bold text-purple-700 mb-3 flex items-center gap-2 border-b pb-2">
@@ -4068,7 +4054,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                               Doubles
                             </h4>
                             <div className="space-y-4">
-                              {divisions.map(div => {
+                              {DOUBLES_DIVISIONS.map(div => {
                                 const teams = doublesGroups[div];
                                 if (teams.length === 0) return null;
                                 
@@ -4211,6 +4197,175 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
 };
 
 /* =========================
+   TV Display - Club Championships (grouped by Singles/Doubles then division)
+========================= */
+
+const SINGLES_DIVISIONS = ["A", "B", "C", "D"];
+const DOUBLES_DIVISIONS = ["A", "B", "C", "D", "60+"];
+
+type TVPage = "singles" | "doubles";
+
+const ClubChampsTVDisplay: React.FC<{ eventId: string; page: TVPage }> = ({ eventId, page }) => {
+  const [eventName, setEventName] = useState<string>("");
+  const [registrations, setRegistrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const GAS_URL = process.env.REACT_APP_GAS_URL || "https://script.google.com/macros/s/AKfycbwheCy89SdRcfXWgYXqQnrrnR-aZ-x-YnCnyRixmn-MHMLz5sA4IrGgihvqb-8iOjMq/exec";
+
+  const loadData = React.useCallback(async () => {
+    if (!GAS_URL || GAS_URL.includes("YOUR_GOOGLE_APPS_SCRIPT_URL")) {
+      setEventName("KWRC 2026 Club Championships");
+      setRegistrations([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const [configRes, regsRes] = await Promise.all([
+        jsonpCall(GAS_URL, { action: "getEventConfigs" }),
+        jsonpCall(GAS_URL, { action: "getRegistrations", event_id: eventId }),
+      ]);
+      const configs = configRes?.success && configRes?.configs
+        ? { ...DEFAULT_EVENT_CONFIGS, ...configRes.configs }
+        : DEFAULT_EVENT_CONFIGS;
+      const name = configs[eventId]?.name ?? "KWRC 2026 Club Championships";
+      setEventName(name);
+      const list = Array.isArray(regsRes?.registrations) ? regsRes.registrations : [];
+      setRegistrations(list.filter((r: any) => r.event_id === eventId));
+      setError(null);
+    } catch (err) {
+      setEventName("KWRC 2026 Club Championships");
+      setRegistrations([]);
+      setError("Unable to load registrations");
+    } finally {
+      setLoading(false);
+    }
+  }, [GAS_URL, eventId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Auto-refresh every 60 seconds for TV
+  useEffect(() => {
+    const t = setInterval(loadData, 60 * 1000);
+    return () => clearInterval(t);
+  }, [loadData]);
+
+  // Group by Singles / Doubles then by division (singles: A-D only; doubles: A-D + 60+)
+  const { singlesGroups, doublesGroups } = React.useMemo(() => {
+    const singles: Record<string, any[]> = { A: [], B: [], C: [], D: [] };
+    const doubles: Record<string, any[]> = { A: [], B: [], C: [], D: [], "60+": [] };
+    registrations.forEach((member: any) => {
+      const extra = member.extra_json || {};
+      const eventTypes = extra.event_types || {};
+      if (eventTypes.singles && extra.singles_division && singles[extra.singles_division]) {
+        singles[extra.singles_division].push({ ...member, type: "singles" });
+      }
+      if (eventTypes.doubles && extra.doubles_division && doubles[extra.doubles_division]) {
+        doubles[extra.doubles_division].push({
+          ...member,
+          type: "doubles",
+          partner: extra.doubles_partner || "TBD",
+        });
+      }
+    });
+    return { singlesGroups: singles, doublesGroups: doubles };
+  }, [registrations]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center">
+        <Loader2 className="w-16 h-16 animate-spin text-indigo-400" />
+      </div>
+    );
+  }
+
+  const isSingles = page === "singles";
+  const divisions = isSingles ? SINGLES_DIVISIONS : DOUBLES_DIVISIONS;
+  const groups = isSingles ? singlesGroups : doublesGroups;
+  const hasAny = divisions.some((d) => groups[d].length > 0);
+
+  return (
+    <div className="min-h-screen bg-slate-900 text-white p-8 md:p-12 overflow-auto">
+      <h1 className="text-4xl md:text-5xl font-bold text-center mb-2 text-white">
+        {eventName}
+      </h1>
+      <p className="text-center text-slate-400 text-xl mb-10">
+        {isSingles ? "Singles" : "Doubles"} — Registration list
+      </p>
+
+      {error && (
+        <p className="text-center text-amber-400 text-lg mb-6">{error}</p>
+      )}
+
+      {!hasAny && (
+        <p className="text-center text-slate-400 text-2xl">No registrations yet</p>
+      )}
+
+      <div className="w-full mx-auto">
+        {isSingles ? (
+          <div className="grid grid-cols-4 gap-6">
+            {SINGLES_DIVISIONS.map((div) => {
+              const players = singlesGroups[div];
+              return (
+                <div key={`s-${div}`} className="bg-slate-800/80 rounded-xl p-6 border border-slate-600 min-w-0">
+                  <h3 className="text-xl md:text-2xl font-semibold text-indigo-200 mb-4">
+                    Division {div}
+                    <span className="ml-2 text-base font-normal text-slate-400">
+                      ({players.length})
+                    </span>
+                  </h3>
+                  <ul className="space-y-2">
+                    {players.map((p: any, idx: number) => (
+                      <li key={idx} className="text-lg md:text-xl text-white">
+                        {p.player_name}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-5 gap-6">
+            {DOUBLES_DIVISIONS.map((div) => {
+              const teams = doublesGroups[div];
+              return (
+                <div key={`d-${div}`} className="bg-slate-800/80 rounded-xl p-6 border border-slate-600 min-w-0">
+                  <h3 className="text-xl md:text-2xl font-semibold text-purple-200 mb-4">
+                    Division {div}
+                    <span className="ml-2 text-base font-normal text-slate-400">
+                      ({teams.length})
+                    </span>
+                  </h3>
+                  <ul className="space-y-2">
+                    {teams.map((t: any, idx: number) => (
+                      <li key={idx} className="text-lg md:text-xl text-white">
+                        {t.player_name} / {t.partner}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const TVDisplayWrapper: React.FC<{ page: TVPage }> = ({ page }) => {
+  const { eventId } = useParams<{ eventId: string }>();
+  if (!eventId) return <Navigate to="/" replace />;
+  if (eventId !== "club-champs") {
+    return <Navigate to={`/${eventId}`} replace />;
+  }
+  return <ClubChampsTVDisplay eventId={eventId} page={page} />;
+};
+
+/* =========================
    Default Event Redirect Component
 ========================= */
 
@@ -4270,9 +4425,19 @@ const DefaultEventRedirect: React.FC = () => {
 ========================= */
 
 const MultiEventRegistration: React.FC = () => {
+  const TVRedirectToSingles: React.FC = () => {
+    const { eventId } = useParams<{ eventId: string }>();
+    if (!eventId) return <Navigate to="/" replace />;
+    return <Navigate to={`/${eventId}/tv/singles`} replace />;
+  };
   return (
     <Router>
       <Routes>
+        {/* TV display for Club Championships - separate pages for Singles and Doubles */}
+        <Route path="/:eventId/tv/singles" element={<TVDisplayWrapper page="singles" />} />
+        <Route path="/:eventId/tv/doubles" element={<TVDisplayWrapper page="doubles" />} />
+        <Route path="/:eventId/tv" element={<TVRedirectToSingles />} />
+        
         {/* Dynamic route for any event ID */}
         <Route path="/:eventId" element={<MultiEventRegistrationPageWrapper />} />
         
