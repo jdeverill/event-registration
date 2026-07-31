@@ -3,4 +3,4 @@
 
 # Google Apps Script Web App URL
 # .env.local
-REACT_APP_GAS_URL=https://script.google.com/macros/s/AKfycbyBGg-vK9Uk0hMLoutFiQV-_JzbPLH2sI6s4VmRxnNOQ7kt_BocEZxDfWj-ISqjdIJr/exec
+REACT_APP_GAS_URL=https://script.google.com/macros/s/AKfycby92xuwAf9DNNtLIZU40BQFWMALol5zb5RdfAjX77tYw2WVfGFcmYVC-fWf_2aTbakq/exec

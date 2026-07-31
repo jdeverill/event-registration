@@ -84,6 +84,7 @@ interface EventConfig {
 
 interface Member {
   name: string;
+  member_id?: string;
 }
 
 interface RegistrationData {
