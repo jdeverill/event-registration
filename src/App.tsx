@@ -4742,8 +4742,7 @@ const DefaultEventRedirect: React.FC = () => {
           return;
         }
 
-        const result = await fetch(GAS_URL + "?action=getEventConfigs");
-        const data = await result.json();
+        const data = await jsonpCall(GAS_URL, { action: "getEventConfigs" });
         
         if (data.success && data.configs) {
           const mergedConfigs = {

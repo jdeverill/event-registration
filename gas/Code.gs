@@ -87,12 +87,12 @@ function addWinterPDL() {
   return { success: true, configs: updated };
 }
 
-/** Duplicate of Winter PDL 9.0 for admin use; hidden from public header selector. */
-function addWinterPDLCopy() {
-  const winterCopy = {
-    "winter-pdl-9.0-2026-2": {
-      id: "winter-pdl-9.0-2026-2",
-      name: "KWRC Winter PDL 9.0",
+/** Fall PDL 10.0 2026 — renamed from winter-pdl-9.0-2026-2; hidden from public header selector. */
+function addFallPDL10() {
+  const fallConfig = {
+    "fall-pdl-10.0_2026": {
+      id: "fall-pdl-10.0_2026",
+      name: "KWRC Fall PDL 10.0",
       description: "Premier Doubles League - Winter 2026 Season",
       location: "Played on the Best Doubles Court in the World",
       format: [
@@ -106,7 +106,7 @@ function addWinterPDLCopy() {
         "Pos. 2 - Wednesdays at 6 or 7pm",
         "Pos. 1 - Wednesdays at 8 or 9pm"
       ],
-      cost: "$60 + hst",
+      cost: "$70 + tax",
       maxRegistrations: 50,
       registrationOpenTime: "",
       registrationCloseTime: "",
@@ -119,7 +119,7 @@ function addWinterPDLCopy() {
         { name: "comments", type: "textarea", label: "Comments (Optional)", required: false, placeholder: "Any additional comments or preferences..." }
       ],
       ui: {
-        title: "KWRC Winter PDL 9.0 Registration",
+        title: "KWRC Fall PDL 10.0 Registration",
         subtitle: "10-week Premier Doubles League",
         theme: { primary: "blue", secondary: "indigo" }
       },
@@ -131,10 +131,16 @@ function addWinterPDLCopy() {
   };
   const configsJson = properties.getProperty('EVENT_CONFIGS');
   const configs = configsJson ? JSON.parse(configsJson) : {};
-  const updated = { ...configs, ...winterCopy };
+  delete configs['winter-pdl-9.0-2026-2'];
+  const updated = { ...configs, ...fallConfig };
   properties.setProperty('EVENT_CONFIGS', JSON.stringify(updated));
-  console.log('Winter PDL 9.0 copy added successfully (hidden from header)');
+  console.log('Fall PDL 10.0 added successfully (hidden from header)');
   return { success: true, configs: updated };
+}
+
+/** @deprecated Use addFallPDL10 */
+function addWinterPDLCopy() {
+  return addFallPDL10();
 }
 
 /** Padel Club Championships 2026 — doubles only; partner default, solo optional. */
@@ -385,11 +391,11 @@ function toBool(v) {
   return v === true || v === 'true' || v === 1 || v === '1';
 }
 
-function json(obj, status = 200) {
+function json(obj) {
+  // TextOutput has no setResponseCode; GAS web apps always return HTTP 200.
   return ContentService
     .createTextOutput(JSON.stringify(obj))
-    .setMimeType(ContentService.MimeType.JSON)
-    .setResponseCode(status);
+    .setMimeType(ContentService.MimeType.JSON);
 }
 
 function checkRateLimit(key, limit, windowSec) {
@@ -495,7 +501,7 @@ function doPost(e) {
       return ContentService.createTextOutput(cb + '(' + JSON.stringify(errorResult) + ');')
         .setMimeType(ContentService.MimeType.JAVASCRIPT);
     }
-    return json(errorResult, 500);
+    return json(errorResult);
   }
 }
 
