@@ -348,6 +348,93 @@ function setCacheCompressed(key, data, ttl) {
   return true;
 }
 
+function normalizePlayerName_(name) {
+  return String(name || '').toLowerCase().trim();
+}
+
+function getEventConfigById_(eventId) {
+  if (!eventId) return null;
+  try {
+    var configsJson = properties.getProperty('EVENT_CONFIGS');
+    var configs = configsJson ? JSON.parse(configsJson) : {};
+    return configs[eventId] || null;
+  } catch (e) {
+    return null;
+  }
+}
+
+function namesFromRegistrationRow_(row, headers) {
+  var nameCol = headers.indexOf('player_name');
+  var extraCol = headers.indexOf('extra_json');
+  var names = [];
+  var primary = normalizePlayerName_(nameCol === -1 ? '' : row[nameCol]);
+  if (primary) names.push(primary);
+  if (extraCol !== -1 && row[extraCol]) {
+    try {
+      var extra = (typeof row[extraCol] === 'object') ? row[extraCol] : JSON.parse(row[extraCol]);
+      if (Array.isArray(extra && extra.team_members)) {
+        extra.team_members.forEach(function(n) {
+          var name = normalizePlayerName_(typeof n === 'string' ? n : (n && n.name));
+          if (name) names.push(name);
+        });
+      }
+    } catch (e) {}
+  }
+  return names;
+}
+
+function weekFromRegistrationRow_(row, headers) {
+  var extraCol = headers.indexOf('extra_json');
+  if (extraCol === -1 || !row[extraCol]) return '';
+  try {
+    var extra = (typeof row[extraCol] === 'object') ? row[extraCol] : JSON.parse(row[extraCol]);
+    return extra.clinic_week || extra.survivor_week || extra.week || '';
+  } catch (e) {
+    return '';
+  }
+}
+
+function collectSubmitNames_(playerName, extraObj) {
+  var names = [];
+  var primary = normalizePlayerName_(playerName);
+  if (primary) names.push(primary);
+  if (extraObj && Array.isArray(extraObj.team_members)) {
+    extraObj.team_members.forEach(function(n) {
+      var name = normalizePlayerName_(typeof n === 'string' ? n : (n && n.name));
+      if (name && names.indexOf(name) === -1) names.push(name);
+    });
+  }
+  return names;
+}
+
+function findDuplicateNameInEvent_(data, headers, eventId, namesToCheck, week, recurring) {
+  if (!eventId || !namesToCheck || !namesToCheck.length) return null;
+  var eventCol = headers.indexOf('event_id');
+  if (eventCol === -1) return null;
+  var wanted = {};
+  namesToCheck.forEach(function(n) { if (n) wanted[n] = true; });
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][eventCol]) !== String(eventId)) continue;
+    if (recurring) {
+      if (String(weekFromRegistrationRow_(data[i], headers)) !== String(week || '')) continue;
+    }
+    var existing = namesFromRegistrationRow_(data[i], headers);
+    for (var n = 0; n < existing.length; n++) {
+      if (wanted[existing[n]]) return existing[n];
+    }
+  }
+  return null;
+}
+
+function clearRegistrationCaches_(eventId) {
+  if (!eventId) return;
+  ['count:', 's:', 'r:', 'd:'].forEach(function(prefix) {
+    cache.remove(prefix + eventId);
+    cache.remove(prefix + eventId + ':v1');
+    cache.remove(prefix + eventId + ':v2');
+  });
+}
+
 function buildPlayerIndex(data, headers) {
   var eventCol = headers.indexOf('event_id');
   var nameCol = headers.indexOf('player_name');
@@ -899,28 +986,48 @@ function handleSubmitOptimized(p) {
       return { success: false, error: 'Invalid verification token' };
     }
   }
+
+  var extraObj = (typeof p.extra_json === 'object') ? p.extra_json : parseJsonLoose(p.extra_json);
+  if (p.clinic_week && !extraObj.clinic_week) extraObj.clinic_week = p.clinic_week;
+  if (p.survivor_week && !extraObj.survivor_week) extraObj.survivor_week = p.survivor_week;
+  if (p.week && !extraObj.week) extraObj.week = p.week;
+
+  var eventId = p.event_id || '';
+  var eventConfig = getEventConfigById_(eventId);
+  var allowDuplicates = !!(eventConfig && eventConfig.rules && eventConfig.rules.allowDuplicates);
+  var recurring = !!(eventConfig && eventConfig.isRecurring);
+  var week = extraObj.clinic_week || extraObj.survivor_week || extraObj.week || '';
+  var namesToCheck = collectSubmitNames_(p.player_name, extraObj);
+
   var lock = LockService.getScriptLock();
-  if (!lock.tryLock(5000)) {
+  if (!lock.tryLock(20000)) {
     return { success: false, error: 'System busy, please retry' };
   }
+
   var regNo;
   try {
+    if (!allowDuplicates && namesToCheck.length) {
+      var values = getRegistrationsSheet().getDataRange().getValues();
+      var duplicateName = findDuplicateNameInEvent_(
+        values, values[0] || [], eventId, namesToCheck, week, recurring
+      );
+      if (duplicateName) {
+        return {
+          success: false,
+          isDuplicate: true,
+          error: 'This player is already registered'
+        };
+      }
+    }
+
     var current = Number(properties.getProperty('REG_SEQ') || '0') + 1;
     properties.setProperty('REG_SEQ', String(current));
     regNo = current;
-  } finally {
-    lock.releaseLock();
-  }
-  try {
-    var sheet = getRegistrationsSheet();
-    var extraObj = (typeof p.extra_json === 'object') ? p.extra_json : parseJsonLoose(p.extra_json);
-    if (p.clinic_week && !extraObj.clinic_week) extraObj.clinic_week = p.clinic_week;
-    if (p.survivor_week && !extraObj.survivor_week) extraObj.survivor_week = p.survivor_week;
-    if (p.week && !extraObj.week) extraObj.week = p.week;
+
     var extraText = JSON.stringify(extraObj);
-    var row = [
+    getRegistrationsSheet().appendRow([
       p.timestamp || new Date().toISOString(),
-      p.event_id || '',
+      eventId,
       p.event_name || '',
       p.player_name || '',
       email,
@@ -931,34 +1038,76 @@ function handleSubmitOptimized(p) {
       extraText,
       regNo,
       toBool(p.is_waiting_list)
-    ];
-    sheet.appendRow(row);
-    var eventId = p.event_id;
-    if (eventId) {
-      ['count:', 's:', 'r:', 'd:'].forEach(function(prefix) {
-        cache.remove(prefix + eventId);
-        cache.remove(prefix + eventId + ':v1');
-        cache.remove(prefix + eventId + ':v2');
-      });
-    }
-    if (email) {
-      try {
-        var subject = 'Registration Confirmation - ' + (p.event_name || 'Event');
-        var body = 'Hi ' + (p.player_name || '') + ',\n\nYour registration is confirmed.\n\nRegistration #' + regNo + '\n\nThank you!';
-        sendEmail(email, subject, body);
-      } catch (e) {
-        console.error('Confirmation email error:', e);
-      }
-    }
-    if (token) cache.remove('token:' + token);
-    return {
-      success: true,
-      registrationNumber: regNo,
-      isWaitingList: toBool(p.is_waiting_list)
-    };
+    ]);
+    clearRegistrationCaches_(eventId);
   } catch (err) {
     console.error('handleSubmitOptimized error:', err);
     return { success: false, error: 'Failed to submit registration' };
+  } finally {
+    lock.releaseLock();
+  }
+
+  if (email) {
+    try {
+      var subject = 'Registration Confirmation - ' + (p.event_name || 'Event');
+      var body = 'Hi ' + (p.player_name || '') + ',\n\nYour registration is confirmed.\n\nRegistration #' + regNo + '\n\nThank you!';
+      sendEmail(email, subject, body);
+    } catch (e) {
+      console.error('Confirmation email error:', e);
+    }
+  }
+  if (token) cache.remove('token:' + token);
+  return {
+    success: true,
+    registrationNumber: regNo,
+    isWaitingList: toBool(p.is_waiting_list)
+  };
+}
+
+/**
+ * One-time cleanup: delete Matthew Haffey's extra Fall PDL 10.0 row (#534).
+ * Keeps the original #533. Run from the Apps Script editor after deploying.
+ */
+function removeMatthewHaffeyDuplicate() {
+  return deleteRegistrationByNumber_('fall-pdl-10.0_2026', 534, 'Matthew Haffey');
+}
+
+function deleteRegistrationByNumber_(eventId, registrationNumber, expectedName) {
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) {
+    return { success: false, error: 'System busy, please retry' };
+  }
+  try {
+    var sheet = getRegistrationsSheet();
+    var data = sheet.getDataRange().getValues();
+    var headers = data[0] || [];
+    var eventCol = headers.indexOf('event_id');
+    var nameCol = headers.indexOf('player_name');
+    var numCol = headers.indexOf('registration_number');
+    if (eventCol === -1 || numCol === -1) {
+      return { success: false, error: 'Missing event_id or registration_number column' };
+    }
+    for (var i = data.length - 1; i >= 1; i--) {
+      if (String(data[i][eventCol]) !== String(eventId)) continue;
+      if (Number(data[i][numCol]) !== Number(registrationNumber)) continue;
+      if (expectedName && normalizePlayerName_(data[i][nameCol]) !== normalizePlayerName_(expectedName)) {
+        return { success: false, error: 'Name mismatch, aborting delete' };
+      }
+      sheet.deleteRow(i + 1);
+      clearRegistrationCaches_(eventId);
+      return {
+        success: true,
+        deletedRow: i + 1,
+        registrationNumber: registrationNumber,
+        player_name: data[i][nameCol]
+      };
+    }
+    return { success: false, error: 'Registration row not found' };
+  } catch (err) {
+    console.error('deleteRegistrationByNumber_ error:', err);
+    return { success: false, error: String(err) };
+  } finally {
+    lock.releaseLock();
   }
 }
 

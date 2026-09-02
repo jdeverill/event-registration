@@ -2655,8 +2655,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           golfers.push({ name: data.additional_player_3, email: undefined, dinner: !!data.dinner_golfer_4 });
         }
 
+        const timestamp = new Date().toISOString();
         const registrationData = {
-          timestamp: new Date().toISOString(),
+          timestamp,
           event_id: currentEventId,
           event_name: eventConfig.name,
           player_name: data.player_name,
@@ -2678,6 +2679,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           is_waiting_list: isWaitingList,
           verification_token: verificationToken || undefined,
           skip_verification: !eventConfig?.notifications?.requireEmailVerification,
+          idempotency_key: `${currentEventId}:${String(data.player_name || "").toLowerCase().trim()}:${timestamp}`,
         };
 
         const result = await apiCall("submit_registration", registrationData);
@@ -2807,8 +2809,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           ? (padel && register_solo ? "TBD" : (doubles_partner || "TBD"))
           : null;
 
+        const timestamp = new Date().toISOString();
         const registrationData = {
-          timestamp: new Date().toISOString(),
+          timestamp,
           event_id: currentEventId,
           event_name: eventConfig.name,
           player_name: player_name || "",
@@ -2829,6 +2832,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           registration_number: registrationCount + 1,
           is_waiting_list: isWaitingList,
           verification_token: verificationToken || undefined,
+          idempotency_key: `${currentEventId}:${String(player_name || "").toLowerCase().trim()}:${timestamp}`,
         };
 
         const result = await apiCall("submit_registration", registrationData);
@@ -2907,8 +2911,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           if (!k.startsWith(teamPrefix)) cleanExtra[k] = v;
         });
 
+        const timestamp = new Date().toISOString();
         const registrationData = {
-          timestamp: new Date().toISOString(),
+          timestamp,
           event_id: currentEventId,
           event_name: eventConfig.name,
           player_name: teamMembers[0] || "",
@@ -2935,6 +2940,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           registration_number: registrationCount + 1,
           is_waiting_list: isWaitingList,
           verification_token: verificationToken || undefined,
+          idempotency_key: `${currentEventId}:${String(teamMembers[0] || "").toLowerCase().trim()}:${timestamp}`,
         };
 
         const result = await apiCall("submit_registration", registrationData);
@@ -2966,8 +2972,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
       } else {
         const { player_name, email, phone, division, wall, comments, clinic_week, survivor_week, week, preferred_partner, ...extraFields } = data;
 
+        const timestamp = new Date().toISOString();
         const registrationData = {
-          timestamp: new Date().toISOString(),
+          timestamp,
           event_id: currentEventId,
           event_name: eventConfig.name,
           player_name: player_name || "",
@@ -2992,6 +2999,7 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           registration_number: registrationCount + 1,
           is_waiting_list: isWaitingList,
           verification_token: verificationToken || undefined,
+          idempotency_key: `${currentEventId}:${String(player_name || "").toLowerCase().trim()}:${timestamp}`,
         };
 
         const result = await apiCall("submit_registration", registrationData);
