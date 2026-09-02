@@ -4229,7 +4229,9 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
           <div className="bg-white rounded-xl shadow-xl p-6 flex flex-col h-full">
             <h3 className="text-xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Users className="w-5 h-5" />
-              {eventConfig?.isRecurring ? "Weekly Registrations" : "Registrations"}
+              {eventConfig?.isRecurring
+                ? "Weekly Registrations"
+                : `Registrations${registeredMembers.length ? ` (${registeredMembers.length})` : ""}`}
             </h3>
 
             {isLoadingStats ? (
@@ -4453,25 +4455,23 @@ const MultiEventRegistrationPage: React.FC<{ eventId: string }> = ({ eventId }) 
                   })()
                 ) : (
                   (() => {
+                    const sortBySignupOrder = (a: any, b: any) => {
+                      const aTime = new Date(a.timestamp).getTime();
+                      const bTime = new Date(b.timestamp).getTime();
+                      // PDL: oldest first (registration order). Others: newest first.
+                      if (/pdl/i.test(currentEventId)) {
+                        return aTime - bTime;
+                      }
+                      return bTime - aTime;
+                    };
+
                     const confirmedRegistrations = registeredMembers
                       .filter((member: any) => !member.is_waiting_list)
-                      .sort((a: any, b: any) => {
-                        if (currentEventId === 'fall-pdl-9.0-2025') {
-                          return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-                        }
-                        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-                      })
-                      .slice(0, 50);
+                      .sort(sortBySignupOrder);
 
                     const waitingListRegistrations = registeredMembers
                       .filter((member: any) => member.is_waiting_list)
-                      .sort((a: any, b: any) => {
-                        if (currentEventId === 'fall-pdl-9.0-2025') {
-                          return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime();
-                        }
-                        return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-                      })
-                      .slice(0, 20);
+                      .sort(sortBySignupOrder);
 
                     return (
                       <>
